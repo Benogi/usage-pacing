@@ -136,6 +136,42 @@ function Get-SessionId {
     return $null
 }
 
+# Candidate roots where Claude Code keeps per-project transcripts. We don't hardcode one location:
+# Claude honors $CLAUDE_CONFIG_DIR (and the home dir varies by user/OS), so we build a deduped,
+# preference-ordered list of "<config-dir>/projects" candidates and let the caller search them.
+function Get-ClaudeProjectRoots {
+    $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { $HOME }
+    $candidates = @(
+        $env:CLAUDE_CONFIG_DIR,                 # explicit override wins
+        (Join-Path $homeDir '.claude'),         # default on this account
+        (Join-Path $HOME '.claude'),            # PS $HOME (may differ from USERPROFILE)
+        (Join-Path $env:APPDATA 'claude')       # alt layout some installs use
+    ) | Where-Object { $_ } | ForEach-Object { Join-Path $_ 'projects' }
+    $candidates | Where-Object { Test-Path $_ } | Select-Object -Unique
+}
+
+# The directory a session was started in (its "project" cwd). `claude --resume <id>` is scoped to
+# the current dir's project, so a resume MUST run from this origin dir or it fails with
+# "No conversation found with session ID". We recover it from the session's transcript: Claude stores
+# history at <config-dir>/projects/<encoded-cwd>/<id>.jsonl, and each record carries the real `cwd`
+# (the encoded folder name is lossy, so we read cwd from the file rather than decode the name).
+# We SEARCH all known project roots rather than assuming a fixed path.
+function Get-SessionOriginDir {
+    param([string]$Id)
+    if (-not $Id) { return $null }
+    foreach ($root in (Get-ClaudeProjectRoots)) {
+        try {
+            $jsonl = Get-ChildItem $root -Recurse -Filter "$Id.jsonl" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $jsonl) { continue }
+            foreach ($line in (Get-Content $jsonl.FullName -TotalCount 40)) {
+                try { $o = $line | ConvertFrom-Json } catch { continue }
+                if ($o.cwd) { return [string]$o.cwd }
+            }
+        } catch { }
+    }
+    return $null
+}
+
 # Read this session's record (or $null if none / unreadable).
 function Get-SessionRecord {
     param([string]$Id)
@@ -384,6 +420,14 @@ function Invoke-ScheduleResume {
     param([string]$Sid, [string]$Work, [string]$Pr, [int]$In = 0)
     $id = Get-SessionId -Explicit $Sid
     if (-not $id) { Write-Output "schedule-resume: no session id; aborted"; return }
+    # `claude --resume` only finds the session from the dir it was started in. Recover that origin
+    # from the transcript and let it WIN over any -WorkDir: resuming in the wrong dir is the classic
+    # "No conversation found with session ID" failure. -WorkDir stays a fallback if origin is unknown.
+    $origin = Get-SessionOriginDir -Id $id
+    if ($origin) {
+        if ($Work -and $Work -ne $origin) { Write-Output "schedule-resume: overriding -WorkDir '$Work' with session origin '$origin' (required for --resume)" }
+        $Work = $origin
+    }
     if (-not $Work) { $Work = (Get-Location).Path }
     if (-not $Pr) {
         $Pr = "Auto-resumed after a usage-limit reset. Continue the previous work from where it stopped. You are running unattended: do not ask the user questions. Enable usage pacing for yourself, keep working, and when you approach the cap again run -ScheduleResume and stop."
