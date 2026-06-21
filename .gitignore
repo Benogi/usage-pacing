@@ -1,0 +1,6 @@
+# Runtime / machine-local state — not for the repo
+.usage-cache.json
+sessions/
+resume/
+backups/
+PROGRESS.md
