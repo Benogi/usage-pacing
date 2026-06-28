@@ -1,5 +1,17 @@
 # Usage pacing (multi-session)
 
+## Platform versions
+
+| Platform | Location | Script |
+|---|---|---|
+| **Windows 10** | *(this folder)* | `claude-usage.ps1` (PowerShell) |
+| **Linux Mint** | `linux/` | `claude-usage.py` (Python 3) |
+
+See [`linux/README.md`](linux/README.md) for the Linux Mint version.
+The Windows version is documented below.
+
+---
+
 Makes Claude Code sessions aware of your REAL account usage and coordinate around the shared
 5-hour / weekly limits: each session opts in at start (shown how many are already pacing), the
 pool size scales a reserve of "save-room," and every paced session is told to hand off
