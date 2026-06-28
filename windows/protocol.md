@@ -8,7 +8,7 @@ work normally; the hook's check is cached and shared across sessions, so it's ch
 The injected line looks like:
 `[claude-usage] 5h 88% (resets in 1h2m / 3720s) | weekly 40% | 3 sessions pacing | save-line 84%`
 
-Manual check: `powershell -File $env:USERPROFILE\.claude\usage-pacing\claude-usage.ps1` (or `-Json`).
+Manual check: `powershell -File $env:USERPROFILE\.claude\usage-pacing\windows\claude-usage.ps1` (or `-Json`).
 
 ## The save-line (multi-session aware)
 `save-line` is the 5h % at which you must wind down. It TIGHTENS as more sessions pace, because
@@ -36,7 +36,7 @@ Both Yes variations fire ONLY while this terminal stays open and the PC isn't sh
 
 ### Switching modes mid-session (the choice is not one-shot)
 The opt-in only sets a starting mode; the user can change it anytime. When they ask to switch, run:
-`powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\claude-usage.ps1 -SetMode <no|A|B> -SessionId <YOUR_ID>`
+`powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\claude-usage.ps1 -SetMode <no|A|B> -SessionId <YOUR_ID>`
 and follow the single directive it prints. `-SetMode` always tears down any pending Variation-A
 scheduled task first (so a stale resume can't fire after the switch) and persists the new mode in the
 session file (`resumeMode`), which is why the SAVE-NOW gate can then name the right resume command.
@@ -52,7 +52,7 @@ session file (`resumeMode`), which is why the SAVE-NOW gate can then name the ri
 When you reach the save-line and are about to stop:
 1. If weekly >= 85%, do NOT schedule a resume (weekly budget nearly gone) - just stop.
 2. Otherwise run:
-   `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\claude-usage.ps1 -ScheduleResume -SessionId <YOUR_ID> -WorkDir <project-dir>`
+   `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\claude-usage.ps1 -ScheduleResume -SessionId <YOUR_ID> -WorkDir <project-dir>`
    (YOUR_ID is in the injected [usage-pacing] line; WorkDir defaults to the current dir if omitted.)
    This registers a ONE-SHOT Windows task that at the reset time opens a VISIBLE Windows Terminal
    and continues this session (forked, so it won't fight the original tab). No PC wake; it
@@ -79,7 +79,7 @@ Requirements & steps:
    isn't, relaunch the task by invoking the `loop` skill (user's task, NO interval), or tell the
    user to type `/loop continue the work`, or fall back to Variation A.
 2. At the save-line: write/refresh PROGRESS.md, then run
-   `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\claude-usage.ps1 -LoopResume -SessionId <YOUR_ID>`
+   `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\claude-usage.ps1 -LoopResume -SessionId <YOUR_ID>`
    and DO EXACTLY what the single directive line says:
    - `SLEEP <secs>` -> call `ScheduleWakeup(delaySeconds=<secs>)` passing the SAME `/loop` prompt
      back, then end the turn. (`<secs>` is already clamped <= 3300; long waits are chained across

@@ -6,7 +6,7 @@
       if a different CLAUDE.md already exists, it's backed up to CLAUDE.md.prebak first
   settings.json is backed up to settings.json.bak before any change. Idempotent.
 
-  Run:  powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\activate.ps1
+  Run:  powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\activate.ps1
 #>
 $ErrorActionPreference = 'Stop'
 
@@ -14,12 +14,11 @@ $claudeDir    = Join-Path $env:USERPROFILE '.claude'
 $settingsPath = Join-Path $claudeDir 'settings.json'
 $claudeMd     = Join-Path $claudeDir 'CLAUDE.md'
 $mdBackup     = Join-Path $claudeDir 'CLAUDE.md.prebak'
-$paceDir      = Join-Path $claudeDir 'usage-pacing'
-$script       = Join-Path $paceDir 'claude-usage.ps1'
+$script       = Join-Path $PSScriptRoot 'claude-usage.ps1'
 # Forward slashes: Claude Code runs hook commands through a POSIX-style shell that eats
 # backslashes (C:\Users\... -> C:Users...). PowerShell -File accepts forward slashes fine.
 $scriptFwd    = ($script -replace '\\','/')
-$canonMd      = Join-Path $paceDir 'CLAUDE.global.md'
+$canonMd      = Join-Path $PSScriptRoot 'CLAUDE.global.md'
 $marker       = 'claude-usage.ps1'   # slash-agnostic; identifies OUR hook commands
 $mdMarker     = 'Usage self-pacing'
 

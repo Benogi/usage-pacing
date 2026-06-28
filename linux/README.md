@@ -1,6 +1,8 @@
 # Usage pacing — Linux Mint
 
-Linux Mint port of the Windows version (see `../` for the original). Same behaviour: sessions
+See [`../windows/README.md`](../windows/README.md) for the Windows 10 version. See [`../README.md`](../README.md) for the overview.
+
+Same behaviour as the Windows version: sessions
 opt in at start, a shared pool scales a "save-room" reserve, and paced sessions are nudged to
 write PROGRESS.md and hand off before the cap. Pacing is ADVISORY — agents comply via protocol.md.
 

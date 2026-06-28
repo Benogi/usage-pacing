@@ -6,7 +6,7 @@
   It does NOT delete anything in this folder - all our work stays put. Re-enable with activate.ps1.
   settings.json is backed up to settings.json.bak before any change. Idempotent.
 
-  Run:  powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\deactivate.ps1
+  Run:  powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\deactivate.ps1
 #>
 $ErrorActionPreference = 'Stop'
 

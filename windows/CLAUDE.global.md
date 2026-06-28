@@ -56,4 +56,4 @@ under `/loop` (as in YES+RESUME); leaving **from B** means ending the `/loop` if
 
 Use the exact `<ID>` from the injected line. Once joined you'll get nothing until usage is high
 enough to matter, then a `[claude-usage] ... ACTION ...` line each prompt — just follow the ACTION.
-Everything lives in `$env:USERPROFILE\.claude\usage-pacing\` (see README.md / protocol.md).
+Everything lives in `$env:USERPROFILE\.claude\usage-pacing\windows\` (see README.md / protocol.md).

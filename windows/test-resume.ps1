@@ -2,7 +2,7 @@
   test-resume.ps1 - guided test of the visible scheduled resume. Run AFTER a relaunch.
 
   The agent runs this with its OWN session id (from the [usage-pacing] line injected at start):
-    powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\test-resume.ps1 -SessionId <id>
+    powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\test-resume.ps1 -SessionId <id>
 
   It schedules a resume to fire in a few seconds (test override -InSeconds) with a marker prompt,
   so you can watch the FULL pipeline quickly instead of waiting ~5h for a real reset:
