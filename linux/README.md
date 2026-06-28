@@ -45,6 +45,10 @@ python3 ~/.claude/usage-pacing/linux/claude-usage.py --watch 10
     - `--schedule-resume --session-id <id> [--work-dir d] [--prompt p]`  schedule a visible resume (Variation A)
     - `--cancel-resume --session-id <id>`   cancel a pending scheduled resume
     - `--loop-resume --session-id <id>`     in-harness `/loop` resume directive (Variation B)
+    - `--loop-resume --test-five PCT`       same, but override 5h usage % with PCT for live B demos
+                                            (bypasses the adaptive cache; useful because cache always
+                                            refreshes live when five ≥ 75%, so faking a high value
+                                            via the cache file doesn't work)
     - `--run-resume <id>`                   internal: called by the `at` job at reset time
 - `activate.sh`  / `deactivate.sh` — install / uninstall hooks and CLAUDE.md (idempotent)
 - `test-resume.sh` — fire a Variation A test resume in N seconds
@@ -58,9 +62,12 @@ python3 ~/.claude/usage-pacing/linux/claude-usage.py --watch 10
 
 ### Variation A — visible `at`-scheduled resume (requires `at` daemon)
 When a paced session hits the save-line it registers a ONE-SHOT `at` job that, at the exact reset
-time, opens a new terminal window and continues the session via
+time, opens a new window/tab and continues the session via
 `claude --resume <id> --fork-session --dangerously-skip-permissions` (forked so it won't fight
 the still-open original terminal).
+- **If Oasis GUI is running** (`oasis-gui` process detected): opens the resume in a new tmux
+  session, which Oasis auto-detects as a new tab. Requires `tmux` in PATH.
+- **Otherwise**: launches a standard terminal emulator (`gnome-terminal`, `xterm`, etc.).
 - Does NOT wake the PC; fires only if the PC is running when the `at` timer goes off.
 - Self-cancels if the terminal was closed or the PC was rebooted since scheduling (boot-time guard
   + process-alive guard check PID start-tick via `/proc`).
