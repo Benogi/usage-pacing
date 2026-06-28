@@ -539,7 +539,7 @@ def invoke_set_mode(sid, mode):
 # ── Variation A: schedule resume via 'at' ────────────────────────────────────
 def _find_terminal():
     """Return a terminal emulator command available on this system."""
-    for term in ['x-terminal-emulator', 'gnome-terminal', 'tilix', 'xfce4-terminal', 'mate-terminal', 'xterm', 'konsole']:
+    for term in ['gnome-terminal', 'x-terminal-emulator', 'tilix', 'xfce4-terminal', 'mate-terminal', 'xterm', 'konsole']:
         r = subprocess.run(['which', term], capture_output=True)
         if r.returncode == 0:
             return term
@@ -673,8 +673,16 @@ def invoke_schedule_resume(sid, work_dir=None, prompt=None, in_seconds=0):
         suffix = f" [at job {job_id}]" if job_id else ""
         print(f"schedule-resume: visible resume set for {when.strftime('%Y-%m-%d %H:%M')} in {work_dir}{suffix}")
     except FileNotFoundError:
+        for p in (state_path, launch_path):
+            try:
+                if os.path.exists(p): os.remove(p)
+            except: pass
         print("schedule-resume FAILED: 'at' command not found. Install with: sudo apt install at && sudo systemctl enable --now atd")
     except Exception as e:
+        for p in (state_path, launch_path):
+            try:
+                if os.path.exists(p): os.remove(p)
+            except: pass
         print(f"schedule-resume FAILED: {e}")
 
 
@@ -907,8 +915,8 @@ def show_report(raw=False, as_json=False):
             'sevenDayPct':       u['seven_day']['utilization'],
             'sevenDayReset':     u['seven_day']['resets_at'],
             'sevenDayResetSecs': secs_to(u['seven_day']['resets_at']),
-            'opusPct':           u.get('seven_day_opus',   {}).get('utilization'),
-            'sonnetPct':         u.get('seven_day_sonnet', {}).get('utilization'),
+            'opusPct':           (u.get('seven_day_opus')   or {}).get('utilization'),
+            'sonnetPct':         (u.get('seven_day_sonnet') or {}).get('utilization'),
             'sessionsPacing':    n,
             'saveLine':          get_save_line(n),
             'planMultiplier':    get_plan_multiplier(),
