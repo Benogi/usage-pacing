@@ -259,6 +259,34 @@ def get_save_line(active_count):
     return max(line, 50.0)
 
 
+# ── Oasis GUI / tmux integration ─────────────────────────────────────────────
+def _is_oasis_running():
+    try:
+        r = subprocess.run(['pgrep', '-x', 'oasis-gui'], capture_output=True)
+        return r.returncode == 0
+    except:
+        return False
+
+
+def _open_in_oasis_tmux(launch_path, work_dir):
+    """Create a new tmux session; Oasis GUI auto-detects it as a new tab."""
+    import random, string
+    suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+    session_name = f'claude-resume-{suffix}'
+    cmd = ['bash', '-c', f"bash {launch_path!r}; exec bash"]
+    r = subprocess.run(
+        ['tmux', 'new-session', '-d', '-s', session_name, '-c', work_dir, '-x', '220', '-y', '50'],
+        capture_output=True,
+    )
+    if r.returncode != 0:
+        return False, session_name
+    subprocess.Popen(
+        ['tmux', 'send-keys', '-t', session_name, f'bash {launch_path!r}', 'Enter'],
+        close_fds=True,
+    )
+    return True, session_name
+
+
 # ── Linux: process detection via /proc ───────────────────────────────────────
 def _parse_proc_stat(pid):
     """Parse /proc/<pid>/stat. Returns dict or None."""
@@ -649,10 +677,8 @@ def invoke_schedule_resume(sid, work_dir=None, prompt=None, in_seconds=0):
     this_script = os.path.abspath(__file__)
     at_job_cmd  = f'python3 {sh_escape(this_script)} --run-resume {sh_escape(id_)}\n'
 
-    if in_seconds > 0:
-        at_time_str = f'now + {in_seconds} seconds'
-    else:
-        at_time_str = when.strftime('%H:%M %m/%d/%Y')
+    # Always use an absolute HH:MM time — 'now + N seconds' is not portable across at implementations.
+    at_time_str = when.strftime('%H:%M %m/%d/%Y')
 
     try:
         result = subprocess.run(
@@ -661,6 +687,10 @@ def invoke_schedule_resume(sid, work_dir=None, prompt=None, in_seconds=0):
             text=True,
             capture_output=True,
         )
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout).strip()
+            raise RuntimeError(f"'at' rejected time '{at_time_str}': {err}")
+
         job_match = re.search(r'job (\d+)', result.stderr + result.stdout)
         job_id = job_match.group(1) if job_match else None
 
@@ -671,7 +701,7 @@ def invoke_schedule_resume(sid, work_dir=None, prompt=None, in_seconds=0):
 
         set_resume_armed(id_, True)
         suffix = f" [at job {job_id}]" if job_id else ""
-        print(f"schedule-resume: visible resume set for {when.strftime('%Y-%m-%d %H:%M')} in {work_dir}{suffix}")
+        print(f"schedule-resume: visible resume set for {when.strftime('%Y-%m-%d %H:%M:%S')} in {work_dir}{suffix}")
     except FileNotFoundError:
         for p in (state_path, launch_path):
             try:
@@ -788,30 +818,33 @@ def run_resume(id_):
     env['DISPLAY']    = display
     env['XAUTHORITY'] = xauth
 
-    term = _find_terminal()
-    # Keep the window open after claude exits so the user can see the output
-    keep_open = 'bash'
-
+    # Prefer opening inside Oasis GUI (tmux session it auto-detects as a new tab).
+    # Fall back to a standalone terminal emulator if Oasis is not running.
     try:
-        if term == 'gnome-terminal':
-            subprocess.Popen(
-                [term, '--working-directory', work_dir, '--',
-                 'bash', '-c', f'bash {launch_path!r}; exec bash'],
-                env=env, close_fds=True
-            )
-        elif term == 'xterm':
-            subprocess.Popen(
-                [term, '-e', f'bash -c \'bash {launch_path!r}; exec bash\''],
-                env=env, cwd=work_dir, close_fds=True
-            )
-        elif term:
-            subprocess.Popen(
-                [term, '-e', f'bash -c \'bash {launch_path!r}; exec bash\''],
-                env=env, cwd=work_dir, close_fds=True
-            )
+        if _is_oasis_running():
+            ok, sname = _open_in_oasis_tmux(launch_path, work_dir)
+            if not ok:
+                raise RuntimeError('tmux new-session failed')
         else:
-            # No terminal: run headless (non-visible fallback)
-            subprocess.Popen(['bash', launch_path], env=env, cwd=work_dir, close_fds=True)
+            term = _find_terminal()
+            if term == 'gnome-terminal':
+                subprocess.Popen(
+                    [term, '--working-directory', work_dir, '--',
+                     'bash', '-c', f'bash {launch_path!r}; exec bash'],
+                    env=env, close_fds=True
+                )
+            elif term == 'xterm':
+                subprocess.Popen(
+                    [term, '-e', f'bash -c \'bash {launch_path!r}; exec bash\''],
+                    env=env, cwd=work_dir, close_fds=True
+                )
+            elif term:
+                subprocess.Popen(
+                    [term, '-e', f'bash -c \'bash {launch_path!r}; exec bash\''],
+                    env=env, cwd=work_dir, close_fds=True
+                )
+            else:
+                subprocess.Popen(['bash', launch_path], env=env, cwd=work_dir, close_fds=True)
     except Exception:
         pass
 
@@ -824,10 +857,14 @@ def run_resume(id_):
 
 
 # ── Variation B: in-harness /loop resume ─────────────────────────────────────
-def invoke_loop_resume(sid):
+def invoke_loop_resume(sid, test_five=None):
     try:
         id_ = get_session_id(sid)
-        cu  = get_cached_usage()
+        if test_five is not None:
+            far_future = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=90)).isoformat()
+            cu = {'ok': True, 'five': float(test_five), 'week': 6.0, 'five_reset': far_future}
+        else:
+            cu  = get_cached_usage()
         if not cu['ok']:
             print("[loop-resume] WAIT 600: usage unavailable - ScheduleWakeup(600) with the same /loop prompt and re-run --loop-resume.")
             return
@@ -947,6 +984,7 @@ def main():
     p.add_argument('--schedule-resume',  action='store_true')
     p.add_argument('--cancel-resume',    action='store_true')
     p.add_argument('--loop-resume',      action='store_true')
+    p.add_argument('--test-five',        type=float, default=None, metavar='PCT', help='Override 5h usage % for testing --loop-resume')
     p.add_argument('--run-resume',       metavar='ID',   help='Internal: fired by at job')
     p.add_argument('--session-id',       metavar='ID')
     p.add_argument('--work-dir',         metavar='DIR')
@@ -966,7 +1004,7 @@ def main():
     elif args.set_mode:        invoke_set_mode(args.session_id, args.set_mode)
     elif args.schedule_resume: invoke_schedule_resume(args.session_id, args.work_dir, args.prompt, args.in_seconds)
     elif args.cancel_resume:   invoke_cancel_resume(args.session_id)
-    elif args.loop_resume:     invoke_loop_resume(args.session_id)
+    elif args.loop_resume:     invoke_loop_resume(args.session_id, args.test_five)
     elif args.gate:            show_gate(args.session_id)
     elif args.brief:           show_brief()
     elif args.watch > 0:
