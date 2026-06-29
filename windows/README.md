@@ -38,7 +38,7 @@ All state is shared files in this folder, read/written by the per-prompt hook â€
   `-SetMode`); it lets the SAVE-NOW gate name the right resume command. All writes go through one
   merge-writer so heartbeats preserve `resumeArmed` + `resumeMode`.
 - `resume\<id>.json`, `resume\<id>-launch.ps1` - per-pending-resume state (auto-cleaned after firing)
-- `../PLAN.md` - design doc; `../HANDOFF.md` - cold-resume entry point
+- `../docs/PLAN.md` - design doc; `../docs/HANDOFF.md` - cold-resume entry point (private submodule)
 
 ## Auto-resume after the reset (opt-in, visible)
 When a paced session hits the save-line it can register a ONE-SHOT Windows Scheduled Task that, at
@@ -92,11 +92,11 @@ anything unrecognized falls back to x1 (Pro = most conservative). Tune the `$Pro
 
 ## Turn it off / on (without deleting anything)
 - **Disable / revert to stock Claude Code:**
-  `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\deactivate.ps1`
+  `powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\usage-pacing\windows\deactivate.ps1"`
   Strips only our hook entries from `settings.json` (other keys & any unrelated hooks kept) and
   removes our `~/.claude/CLAUDE.md`. Nothing in this folder is deleted.
 - **Re-enable:**
-  `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\activate.ps1`
+  `powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\usage-pacing\windows\activate.ps1"`
   Re-adds the hooks and reinstalls `CLAUDE.md` from `CLAUDE.global.md` (the canonical copy here).
 
 Both back up `settings.json` to `settings.json.bak` first, are idempotent, and take effect on the

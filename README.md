@@ -16,9 +16,15 @@ See the platform README for install steps, file reference, and honest limits:
 - [windows/README.md](windows/README.md)
 - [linux/README.md](linux/README.md)
 
-## Shared files (at repo root)
-- `HANDOFF.md` — session history and cold-resume entry point
-- `PLAN.md` — original design rationale
+## Planning docs (private submodule)
+`docs/` is a private git submodule ([Benogi/usage-pacing-private](https://github.com/Benogi/usage-pacing-private)):
+- `docs/HANDOFF.md` — session history and cold-resume entry point
+- `docs/PLAN.md` — original design rationale
+
+Clone with submodule on a new machine:
+```bash
+git clone --recurse-submodules git@github.com:Benogi/usage-pacing.git
+```
 
 ## How it works
 1. A `SessionStart` hook injects the session id + current pool size + live usage %.

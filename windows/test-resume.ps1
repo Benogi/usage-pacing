@@ -2,7 +2,7 @@
   test-resume.ps1 - guided test of the visible scheduled resume. Run AFTER a relaunch.
 
   The agent runs this with its OWN session id (from the [usage-pacing] line injected at start):
-    powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\test-resume.ps1 -SessionId <id>
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\usage-pacing\windows\test-resume.ps1" -SessionId <id>
 
   It schedules a resume to fire in a few seconds (test override -InSeconds) with a marker prompt,
   so you can watch the FULL pipeline quickly instead of waiting ~5h for a real reset:
@@ -32,7 +32,7 @@ Write-Host "  3. RESULT:"
 Write-Host "       - new tab prints 'RESUME-AUTORUN-OK' on its own  ->  auto-run WORKS. Done." -ForegroundColor Green
 Write-Host "       - new tab sits at an empty prompt waiting          ->  auto-run does NOT work." -ForegroundColor Yellow
 Write-Host "         Fix: switch resume-runner's launch to headless 'claude -p' (auto-runs but no"
-Write-Host "         visible tab), OR find an interactive auto-submit flag. See HANDOFF.md open item 2."
+Write-Host "         visible tab), OR find an interactive auto-submit flag. See docs/HANDOFF.md open item 2."
 Write-Host ""
 Write-Host "Cancel a pending test resume:" -ForegroundColor DarkGray
 Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$script`" -CancelResume -SessionId $SessionId" -ForegroundColor DarkGray

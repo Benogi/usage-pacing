@@ -6,7 +6,7 @@
       if a different CLAUDE.md already exists, it's backed up to CLAUDE.md.prebak first
   settings.json is backed up to settings.json.bak before any change. Idempotent.
 
-  Run:  powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\activate.ps1
+  Run:  powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\usage-pacing\windows\activate.ps1"
 #>
 $ErrorActionPreference = 'Stop'
 
