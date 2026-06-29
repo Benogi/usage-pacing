@@ -1,35 +1,72 @@
-# Usage pacing (multi-session)
+# Claude Code usage pacing
 
-Makes Claude Code sessions aware of your REAL account usage and coordinate around the shared
-5-hour / weekly limits. Each session opts in at start, the pool size scales a "save-room"
-reserve, and every paced session is told to hand off early enough that all can save before the
-cap. Pacing is ADVISORY — agents comply via `protocol.md`; nothing hard-stops a session.
+Most usage monitors show you a number. This one makes Claude slow down.
 
-## Platform versions
+When your session approaches the 5-hour cap, the tool injects `ACTION` directives into Claude Code's context and instructs it to write `PROGRESS.md` and hand off — so work is saved before the limit hits. Across multiple simultaneous sessions, a shared pool scales the reserve so every session gets room to save.
+
+## How it's different
+
+| | Passive monitors | This tool |
+|---|---|---|
+| Shows current usage | ✓ | ✓ |
+| Calculates reset time | ✓ | ✓ |
+| Coordinates across sessions | ✗ | ✓ |
+| Injects ACTION directives into Claude | ✗ | ✓ |
+| Auto-resumes after reset | ✗ | ✓ |
+
+## Demo
+
+**Live usage check** (run manually or via hook):
+```
+  Claude Code usage  (live from your account)
+  ------------------------------------------------------------
+  5-hour block [####....................]  16.0%
+                resets in 55m (at Mon 18:50 local)
+                PACE: on track (~19.6% at reset). Headroom ~90.8%/h.
+  7-day window [##......................]  10.0%
+                resets in 3d 23h (at Fri 17:00 local)
+                PACE: on track (~23.0% at reset). Headroom ~0.9%/h.
+  ------------------------------------------------------------
+  sessions pacing   1   save-line 94%   (plan x1)
+```
+
+**Hook injection at session start** (injected into Claude's context silently):
+```
+[usage-pacing] session=a1b2c3d4 | pacing-now=2 | usage 5h 81% / weekly 34%
+```
+
+**Hook injection when approaching the save-line:**
+```
+[claude-usage] 5h 88% (resets in 1h2m / 3720s) | weekly 34% | 2 sessions pacing | save-line 84%
+ACTION SAVE NOW
+```
+Claude sees `ACTION SAVE NOW`, finishes the current step, writes `PROGRESS.md`, and stops — with room still left to do so.
+
+## Auto-resume after the reset
+
+Two variations, both opt-in per session:
+
+- **Variation A** — schedules an OS task (Linux `at`, Windows Task Scheduler) that opens a new terminal and runs `claude --resume` at the exact reset time. Unattended; requires the machine to stay on.
+- **Variation B** — stays in the current session under `/loop`, sleeps with `ScheduleWakeup` until the reset, then continues with normal permissions. Safer; no new window, no elevated trust.
+
+## Platforms
 
 | Platform | Folder | Script |
 |---|---|---|
+| **Linux** | [`linux/`](linux/) | `claude-usage.py` (Python 3) |
 | **Windows 10** | [`windows/`](windows/) | `claude-usage.ps1` (PowerShell) |
-| **Linux Mint** | [`linux/`](linux/) | `claude-usage.py` (Python 3) |
 
-See the platform README for install steps, file reference, and honest limits:
-- [windows/README.md](windows/README.md)
-- [linux/README.md](linux/README.md)
-
-## Planning docs (private submodule)
-`docs/` is a private git submodule ([Benogi/usage-pacing-private](https://github.com/Benogi/usage-pacing-private)):
-- `docs/HANDOFF.md` — session history and cold-resume entry point
-- `docs/PLAN.md` — original design rationale
-
-Clone with submodule on a new machine:
-```bash
-git clone --recurse-submodules git@github.com:Benogi/usage-pacing.git
-```
+See the platform README for install, file reference, and honest limits:
+[linux/README.md](linux/README.md) · [windows/README.md](windows/README.md)
 
 ## How it works
-1. A `SessionStart` hook injects the session id + current pool size + live usage %.
-2. The agent presents a poll (Variation A / B / No) at the start of each session.
-3. A `UserPromptSubmit` hook heartbeats joined sessions and injects `ACTION` directives
-   when usage approaches the save-line.
-4. At the save-line the agent writes `PROGRESS.md` and either schedules a Variation A
-   resume (unattended, new window at reset) or sleeps in-harness via Variation B (`/loop`).
+
+1. `SessionStart` hook injects the session id + pool size + live usage % into Claude's context.
+2. Claude presents an opt-in poll (No / Variation A / Variation B) at the start of each session.
+3. `UserPromptSubmit` hook heartbeats joined sessions every prompt; injects `ACTION` directives once usage crosses the save-line.
+4. Save-line = `100 - reserve_per_session × (pacing_sessions + 1)`. More sessions pacing → earlier save-line, so all have room.
+5. At the save-line: Claude writes `PROGRESS.md` and arms the chosen resume variation.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
