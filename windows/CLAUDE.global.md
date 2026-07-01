@@ -2,11 +2,16 @@
 
 At session start a hook injects, e.g.:
 `[usage-pacing] session=<ID> | pacing-now=<N> | usage 5h X% / weekly Y%`
-plus a `FIRST-ACTION REQUIRED` line when the session hasn't yet answered the opt-in.
+This line is INFORMATIONAL only — do NOT ask about pacing at session start. Just keep the `<ID>`
+handy; you'll need it if/when the opt-in is raised. Work normally.
 
-This is MANDATORY: your VERY FIRST action of the session must present the opt-in as a POLL using
-the `AskUserQuestion` tool (NOT a plain-text question) before doing any other work. Fill in N and
-the live usage so the choice is informed.
+The opt-in is deferred until it actually matters: the per-prompt hook injects a
+`[usage-pacing] PACING OPT-IN ...` directive ONLY once this session's 5h usage nears the save-line
+(or weekly is already high). A session that never approaches the cap is never interrupted.
+
+WHEN (and only when) you see that `PACING OPT-IN` directive, present the opt-in as a POLL using the
+`AskUserQuestion` tool (NOT a plain-text question), before continuing other work. Fill in the N and
+live usage from the directive so the choice is informed.
 
 - **Question (explain what pacing is, docstring-style):** "Usage pacing watches your Claude usage —
   the rolling 5h limit and the weekly limit — across every open session, and quietly nudges me to
@@ -25,7 +30,8 @@ the live usage so the choice is informed.
     active session under /loop — it sleeps in place until the limit resets, then continues right
     here with normal permissions. Same requirement: Terminal stays open and the PC stays awake."
 
-The per-prompt hook RE-INJECTS this directive every turn until you resolve it, so don't defer it.
+The per-prompt hook keeps re-injecting the `PACING OPT-IN` directive each turn until you answer it
+(join or decline), so once it appears, resolve it rather than talking past it.
 
 - **NO** — record the decline so the prompt stops, then proceed normally and don't mention usage again:
   `... claude-usage.ps1 -Decline -SessionId <ID>`

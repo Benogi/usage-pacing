@@ -61,9 +61,9 @@ See the platform README for install, file reference, and honest limits:
 
 ## How it works
 
-1. `SessionStart` hook injects the session id + pool size + live usage % into Claude's context.
-2. Claude presents an opt-in poll (No / Variation A / Variation B) at the start of each session.
-3. `UserPromptSubmit` hook heartbeats joined sessions every prompt; injects `ACTION` directives once usage crosses the save-line.
+1. `SessionStart` hook injects the session id + pool size + live usage % into Claude's context (informational only — no opt-in at start).
+2. `UserPromptSubmit` hook raises an opt-in poll (No / Variation A / Variation B) only once the session nears the save-line (or weekly ≥ 85%), so sessions that never approach the cap are never interrupted.
+3. Once joined, the same hook heartbeats every prompt and injects `ACTION` directives when usage crosses the save-line.
 4. Save-line = `100 - reserve_per_session × (pacing_sessions + 1)`. More sessions pacing → earlier save-line, so all have room.
 5. At the save-line: Claude writes `PROGRESS.md` and arms the chosen resume variation.
 

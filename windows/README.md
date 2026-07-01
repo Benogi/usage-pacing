@@ -3,9 +3,9 @@
 See [`../linux/README.md`](../linux/README.md) for the Linux Mint version. See [`../README.md`](../README.md) for the overview.
 
 Makes Claude Code sessions aware of your REAL account usage and coordinate around the shared
-5-hour / weekly limits: each session opts in at start (shown how many are already pacing), the
-pool size scales a reserve of "save-room," and every paced session is told to hand off
-(PROGRESS.md) early enough that they can all save before the cap.
+5-hour / weekly limits: the opt-in is raised only as a session nears the save-line (not at session
+start; shown how many are already pacing), the pool size scales a reserve of "save-room," and every
+paced session is told to hand off (PROGRESS.md) early enough that they can all save before the cap.
 
 All state is shared files in this folder, read/written by the per-prompt hook — no daemon.
 
@@ -19,7 +19,7 @@ All state is shared files in this folder, read/written by the per-prompt hook �
     - `-SessionStart`  hook: emits `session=<id> | pacing-now=N | usage ...` (reads session_id from stdin)
     - `-Gate`          hook: per-prompt; heartbeats joined sessions, injects when near the save-line
     - `-Join  -SessionId <id>`  opt a session into the pool
-    - `-Decline -SessionId <id>`  record a NO answer (resolved, not joined; stops the forced opt-in)
+    - `-Decline -SessionId <id>`  record a NO answer (resolved, not joined; stops the opt-in prompt)
     - `-SetMode <no|A|B> -SessionId <id>`  switch modes after the opt-in (the choice isn't one-shot):
       `no` leaves the pool, `A` = scheduled-tab resume, `B` = in-harness `/loop` resume. Persists
       `resumeMode`, cancels any pending resume first, and prints one directive for the agent to follow.
@@ -63,10 +63,14 @@ works while the tab stays open under `/loop` AND the PC stays awake (a sleeping 
 fire on a powered-off machine), but nothing runs unattended or with elevated trust. See protocol.md.
 
 ## Flow
-1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage.
-2. `~/.claude/CLAUDE.md` makes the agent present the opt-in as a **poll** (the `AskUserQuestion`
-   tool, not a plain-text question), explaining what pacing is and showing the pool + usage. Three
-   options, each describing its resume behavior:
+1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage as
+   INFORMATIONAL context only — the opt-in is NOT asked at session start.
+2. The opt-in is deferred until it matters: `-Gate` raises a `[usage-pacing] PACING OPT-IN` directive
+   only once this session's 5h usage reaches the **ask-line** (`save-line - AskAheadPct`, default 5%)
+   or weekly >= 85%. A session that never nears the cap is never interrupted. `~/.claude/CLAUDE.md`
+   then makes the agent present the opt-in as a **poll** (the `AskUserQuestion` tool, not a plain-text
+   question), explaining what pacing is and showing the pool + usage. Three options, each describing
+   its resume behavior:
    - **No** -> `-Decline` (pace nothing; never mention usage again).
    - **Yes** -> `-SetMode A` (joins + records **Variation A**; at the save-line it arms a forked-tab
      scheduled resume with `-ScheduleResume`).
