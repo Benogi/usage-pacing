@@ -2,8 +2,8 @@
 
 See [`../windows/README.md`](../windows/README.md) for the Windows 10 version. See [`../README.md`](../README.md) for the overview.
 
-Same behaviour as the Windows version: sessions
-opt in at start, a shared pool scales a "save-room" reserve, and paced sessions are nudged to
+Same behaviour as the Windows version: the opt-in is raised only as a session nears the save-line
+(not at session start), a shared pool scales a "save-room" reserve, and paced sessions are nudged to
 write PROGRESS.md and hand off before the cap. Pacing is ADVISORY — agents comply via protocol.md.
 
 ## Prerequisites
@@ -40,7 +40,7 @@ python3 ~/.claude/usage-pacing/linux/claude-usage.py --watch 10
     - `--session-start`  hook: emits `session=<id> | pacing-now=N | usage ...` (reads session_id from stdin)
     - `--gate`           hook: per-prompt; heartbeats joined sessions, injects when near the save-line
     - `--join  --session-id <id>`    opt a session into the pool
-    - `--decline --session-id <id>`  record a NO answer (stops the forced opt-in)
+    - `--decline --session-id <id>`  record a NO answer (stops the opt-in prompt)
     - `--set-mode <no|A|B> --session-id <id>`  switch modes after the opt-in:
       `no` leaves the pool, `A` = at-job resume, `B` = in-harness `/loop` resume.
     - `--leave --session-id <id>`    opt out / clear
@@ -85,14 +85,18 @@ or `WAIT <secs>`. Trade-off: B only works while the terminal stays open under `/
 stays awake. See protocol.md.
 
 ## Flow
-1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage.
-2. `~/.claude/CLAUDE.md` makes the agent present the opt-in as a **poll** (the `AskUserQuestion`
-   tool, not plain text), explaining pacing and the pool. Three options:
+1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage as
+   INFORMATIONAL context only — the opt-in is NOT asked at session start.
+2. The opt-in is deferred until it matters: `--gate` raises a `[usage-pacing] PACING OPT-IN` directive
+   only once this session's 5h usage reaches the **ask-line** (`save-line - ASK_AHEAD_PCT`, default 5%)
+   or weekly ≥ 85%. A session that never nears the cap is never interrupted. `~/.claude/CLAUDE.md`
+   then makes the agent present the opt-in as a **poll** (the `AskUserQuestion` tool, not plain text),
+   explaining pacing and the pool. Three options:
    - **No** → `--decline` (pace nothing; never mention usage again).
    - **Yes** → `--set-mode A` (joins + Variation A; at the save-line arm `--schedule-resume`).
    - **Yes + resume** → `--set-mode B` then relaunch under `/loop` for Variation B.
-3. `UserPromptSubmit` hook runs `--gate` every prompt: for joined sessions it heartbeats and,
-   once 5h hits the save-line (or weekly hits 85%), injects usage + ACTION directives.
+3. `--gate` also, for joined sessions, heartbeats every prompt and once 5h hits the save-line
+   (or weekly hits 85%), injects usage + ACTION directives.
 4. Sessions drop from the count when heartbeat goes stale, UNLESS `resumeArmed` is set — those
    stay counted until the resume fires or is cancelled.
 

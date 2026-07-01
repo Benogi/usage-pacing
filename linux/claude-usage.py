@@ -47,6 +47,8 @@ PRO_RESERVE = 3.0   # % of Pro budget reserved per paced session (anchor)
 ACTIVE_SEC  = 360   # heartbeat window: session counts as active within this
 STALE_SEC   = 86400 # prune unarmed session files older than this
 NOTICE_PCT  = 75    # soft-notice threshold (5h%)
+ASK_AHEAD_PCT = 5   # unresolved sessions are asked the opt-in this many %-points BELOW the save-line
+                    # (so the answer lands before the save-line, not at session start)
 
 
 # ── ISO date helper ───────────────────────────────────────────────────────────
@@ -414,26 +416,9 @@ def show_session_start(sid):
             print(f"[usage-pacing] session={id_} | pacing-now={n} | usage 5h {cu['five']:.0f}% / weekly {cu['week']:.0f}%")
         else:
             print(f"[usage-pacing] session={id_} | pacing-now={n} | usage unavailable")
-        if id_ and not test_resolved(id_):
-            print(
-                f"[usage-pacing] FIRST-ACTION REQUIRED: your FIRST action this session MUST present the opt-in "
-                f"as a POLL via the AskUserQuestion tool (NOT plain text). The question should explain that usage "
-                f"pacing watches your 5h + weekly Claude usage across sessions and nudges you to save progress "
-                f"before a cap, and show pacing-now + the usage above. Also warn: a Yes session keeps its pool "
-                f"slot while working OR idling-but-waiting-to-resume (it wakes itself at the reset), but closing "
-                f"the tab / Ctrl+C cancels the pending resume and drops it from the pool. Three options with "
-                f"explanatory descriptions (both Yes options need this terminal left open + the PC not shut "
-                f"down/restarted): 'No' (don't pace, work normally), 'Yes' (pace + schedule a terminal that at "
-                f"the 5h reset forks the session into a NEW window and continues the work = Variation A; requires "
-                f"'at' daemon), 'Yes + resume' (pace + relaunch the task in THIS active session under /loop, "
-                f"sleeping in place until the reset then continuing here = Variation B). Then: on No run "
-                f"`python3 {SCRIPT_DIR}/claude-usage.py --decline --session-id {id_}`; on Yes run "
-                f"`python3 {SCRIPT_DIR}/claude-usage.py --set-mode A --session-id {id_}` (records Variation A; "
-                f"then arm --schedule-resume at the save-line); on Yes + resume run "
-                f"`python3 {SCRIPT_DIR}/claude-usage.py --set-mode B --session-id {id_}` then re-launch the "
-                f"task under /loop (see CLAUDE.md / protocol.md). The choice is NOT one-shot - you can switch "
-                f"later anytime with `--set-mode no|A|B`. Do not start other work until answered."
-            )
+        # NOTE: the opt-in is NO LONGER forced at session start. It is raised by the per-prompt
+        # gate only as the session approaches the save-line (see show_gate), so a session that
+        # never gets near the cap is never interrupted. This line is informational context only.
     except:
         pass
 
@@ -443,39 +428,48 @@ def show_gate(sid):
         id_ = get_session_id(sid)
         if not id_:
             return
-        if not test_resolved(id_):
-            n2  = get_joined_active_count()
-            cu2 = get_cached_usage()
-            usage = f"{cu2['five']:.0f}% (5h) / {cu2['week']:.0f}% (weekly)" if cu2['ok'] else "unavailable"
-            print(
-                f"[usage-pacing] FIRST-ACTION REQUIRED: this session has NOT resolved usage pacing. Before "
-                f"anything else, present a POLL via the AskUserQuestion tool (NOT plain text) explaining that "
-                f"usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save "
-                f"progress before a cap. Show: '{n2} session(s) currently pacing; usage {usage}.' Also warn: "
-                f"a Yes session keeps its pool slot while working OR idling-but-waiting-to-resume (it wakes "
-                f"itself at the reset), but closing the tab / Ctrl+C cancels the pending resume and drops it "
-                f"from the pool. Three options with explanatory descriptions (both Yes options need this "
-                f"terminal left open + the PC not shut down/restarted): 'No' (don't pace, work normally), "
-                f"'Yes' (pace + schedule a terminal that at the 5h reset forks the session into a NEW window "
-                f"and continues the work = Variation A; requires 'at' daemon), 'Yes + resume' (pace + relaunch "
-                f"the task in THIS active session under /loop, sleeping until the reset then continuing here = "
-                f"Variation B). On No run: python3 {SCRIPT_DIR}/claude-usage.py --decline --session-id {id_} "
-                f"| on Yes run: python3 {SCRIPT_DIR}/claude-usage.py --set-mode A --session-id {id_} (then "
-                f"arm --schedule-resume at the save-line) | on Yes + resume run: python3 "
-                f"{SCRIPT_DIR}/claude-usage.py --set-mode B --session-id {id_} then re-launch the task under "
-                f"/loop (see CLAUDE.md). The choice is NOT one-shot - you can switch later with --set-mode "
-                f"no|A|B. Do not skip or defer this."
-            )
-            return
-        if not test_joined(id_):
-            return
-        set_heartbeat(id_, True)
+        resolved = test_resolved(id_)
+        if resolved and not test_joined(id_):
+            return  # declined -> silent forever
+
         cu = get_cached_usage()
         if not cu['ok']:
             return
         f5   = cu['five']
         f7   = cu['week']
         n    = get_joined_active_count()
+        save = get_save_line(n)
+
+        # UNRESOLVED session: don't force the opt-in at session start / every prompt anymore.
+        # Raise it ONLY as the session nears the save-line (ask-line = save-line - ASK_AHEAD_PCT, so
+        # the answer lands before the save-line) or when weekly is already high. Below that: silent.
+        if not resolved:
+            ask_line = save - ASK_AHEAD_PCT
+            if f5 >= ask_line or f7 >= 85:
+                usage = f"{f5:.0f}% (5h) / {f7:.0f}% (weekly)"
+                print(
+                    f"[usage-pacing] PACING OPT-IN (5h {f5:.0f}% is nearing the save-line {save:.0f}%): NOW "
+                    f"present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that "
+                    f"usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save "
+                    f"progress before a cap. Show: '{n} session(s) currently pacing; usage {usage}; save-line "
+                    f"{save:.0f}%.' Also warn: a Yes session keeps its pool slot while working OR "
+                    f"idling-but-waiting-to-resume (it wakes itself at the reset), but closing the tab / Ctrl+C "
+                    f"cancels the pending resume and drops it from the pool. Three options with explanatory "
+                    f"descriptions (both Yes options need this terminal left open + the PC not shut "
+                    f"down/restarted): 'No' (don't pace, work normally), 'Yes' (pace + schedule a terminal that "
+                    f"at the 5h reset forks the session into a NEW window and continues the work = Variation A; "
+                    f"requires 'at' daemon), 'Yes + resume' (pace + relaunch the task in THIS session under "
+                    f"/loop, sleeping until the reset then continuing here = Variation B). On No run: python3 "
+                    f"{SCRIPT_DIR}/claude-usage.py --decline --session-id {id_} | on Yes run: python3 "
+                    f"{SCRIPT_DIR}/claude-usage.py --set-mode A --session-id {id_} (then arm --schedule-resume "
+                    f"at the save-line) | on Yes + resume run: python3 {SCRIPT_DIR}/claude-usage.py --set-mode "
+                    f"B --session-id {id_} then re-launch the task under /loop (see CLAUDE.md). The choice is "
+                    f"NOT one-shot - switch later with --set-mode no|A|B."
+                )
+            return
+
+        set_heartbeat(id_, True)          # liveness (joined session)
+        n    = get_joined_active_count()  # recount now that our heartbeat is fresh
         save = get_save_line(n)
         s5   = secs_to(cu['five_reset'])
 
