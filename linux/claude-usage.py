@@ -47,7 +47,10 @@ PRO_RESERVE = 3.0   # % of Pro budget reserved per paced session (anchor)
 ACTIVE_SEC  = 360   # heartbeat window: session counts as active within this
 STALE_SEC   = 86400 # prune unarmed session files older than this
 NOTICE_PCT  = 75    # soft-notice threshold (5h%)
-ASK_AHEAD_PCT = 5   # unresolved sessions are asked the opt-in this many %-points BELOW the save-line
+ASK_PCT     = 75    # unresolved sessions are asked the opt-in once 5h crosses THIS line — anchored to
+                    # awareness (not the save-line) so the ask lands with real room left to pace
+ASK_AHEAD_PCT = 5   # safety guard: keep the ask-line at least this far BELOW the save-line, so a tight
+                    # reserve never makes us ask and say save-now in the same breath
                     # (so the answer lands before the save-line, not at session start)
 
 
@@ -441,14 +444,16 @@ def show_gate(sid):
         save = get_save_line(n)
 
         # UNRESOLVED session: don't force the opt-in at session start / every prompt anymore.
-        # Raise it ONLY as the session nears the save-line (ask-line = save-line - ASK_AHEAD_PCT, so
-        # the answer lands before the save-line) or when weekly is already high. Below that: silent.
+        # Raise it once 5h crosses the awareness ask-line (ASK_PCT, default 75) — early enough that
+        # there's real room left to pace — or when weekly is already high. A session that never climbs
+        # past ASK_PCT is never interrupted. The ask-line is clamped to stay ASK_AHEAD_PCT below the
+        # save-line, so a tight reserve can never make us ask AT the cap. Below that: silent.
         if not resolved:
-            ask_line = save - ASK_AHEAD_PCT
+            ask_line = min(ASK_PCT, save - ASK_AHEAD_PCT)
             if f5 >= ask_line or f7 >= 85:
                 usage = f"{f5:.0f}% (5h) / {f7:.0f}% (weekly)"
                 print(
-                    f"[usage-pacing] PACING OPT-IN (5h {f5:.0f}% is nearing the save-line {save:.0f}%): NOW "
+                    f"[usage-pacing] PACING OPT-IN (5h {f5:.0f}% crossed the ask-line {ask_line:.0f}%, with room left before the save-line {save:.0f}%): NOW "
                     f"present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that "
                     f"usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save "
                     f"progress before a cap. Show: '{n} session(s) currently pacing; usage {usage}; save-line "

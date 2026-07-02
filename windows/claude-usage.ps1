@@ -55,8 +55,12 @@ $ProReserve   = 3.0      # %-of-Pro-budget reserved per paced session (one hando
 $ActiveSec    = 360      # a session counts as "active" if seen within this many seconds
 $StaleSec     = 86400    # session files older than this are pruned
 $NoticePct    = 75       # soft awareness threshold (5h%)
-$AskAheadPct  = 5        # unresolved sessions are asked the opt-in this many %-points BELOW the
-                         # save-line (so the answer lands before the save-line, not at session start)
+$AskPct       = 75       # unresolved sessions are asked the opt-in once 5h usage crosses THIS line.
+                         # Anchored to awareness (not the save-line) so the ask lands with real room
+                         # left to actually pace, instead of arriving right at the cap.
+$AskAheadPct  = 5        # safety guard: the ask-line is always kept at least this far BELOW the
+                         # save-line, so on tight (many-session / low-mult) reserves you're never
+                         # asked and told to save-now in the same breath.
 
 # --- credentials / endpoint -------------------------------------------------
 function Get-Token {
@@ -339,13 +343,15 @@ function Show-Gate {
         $save = Get-SaveLine -ActiveCount $n
 
         # UNRESOLVED session: don't force the opt-in at session start / every prompt anymore.
-        # Raise it ONLY as the session nears the save-line (ask-line = save-line - AskAheadPct, so
-        # the answer lands before the save-line) or when weekly is already high. Below that: silent.
+        # Raise it once 5h crosses the awareness ask-line (AskPct, default 75) - early enough that
+        # there's real room left to pace - or when weekly is already high. A session that never
+        # climbs past AskPct is never interrupted. The ask-line is also clamped to stay at least
+        # AskAheadPct below the save-line, so a tight reserve can never make us ask AT the cap.
         if (-not $resolved) {
-            $askLine = $save - $AskAheadPct
+            $askLine = [math]::Min($AskPct, $save - $AskAheadPct)
             if ($f5 -ge $askLine -or $f7 -ge 85) {
                 $usage = ("{0:N0}% (5h) / {1:N0}% (weekly)" -f $f5, $f7)
-                Write-Output ("[usage-pacing] PACING OPT-IN (5h {5:N0}% is nearing the save-line {3:N0}%): NOW present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save progress before a cap. Show: '{0} session(s) currently pacing; usage {1}; save-line {3:N0}%.' Also warn: a Yes session keeps its pool slot while working OR idling-but-waiting-to-resume (it wakes itself at the reset), but closing the tab / Ctrl+C cancels the pending resume and drops it from the pool. Three options with explanatory descriptions (both Yes options need this Terminal left open + the PC not shut down/restarted): 'No' (don't pace, work normally), 'Yes' (pace + at the 5h reset fork the session into a NEW tab, bypassing folder trust, and continue the work = Variation A), 'Yes + resume' (pace + relaunch the task in THIS session under /loop, sleeping until the reset then continuing here = Variation B). On No run: claude-usage.ps1 -Decline -SessionId {2} | on Yes run: claude-usage.ps1 -SetMode A -SessionId {2} (then arm -ScheduleResume at the save-line) | on Yes + resume run: claude-usage.ps1 -SetMode B -SessionId {2} then re-launch the task under /loop (see CLAUDE.md). The choice is NOT one-shot - switch later with -SetMode no|A|B." -f $n, $usage, $id, $save, $askLine, $f5)
+                Write-Output ("[usage-pacing] PACING OPT-IN (5h {5:N0}% crossed the ask-line {4:N0}%, with room left before the save-line {3:N0}%): NOW present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save progress before a cap. Show: '{0} session(s) currently pacing; usage {1}; save-line {3:N0}%.' Also warn: a Yes session keeps its pool slot while working OR idling-but-waiting-to-resume (it wakes itself at the reset), but closing the tab / Ctrl+C cancels the pending resume and drops it from the pool. Three options with explanatory descriptions (both Yes options need this Terminal left open + the PC not shut down/restarted): 'No' (don't pace, work normally), 'Yes' (pace + at the 5h reset fork the session into a NEW tab, bypassing folder trust, and continue the work = Variation A), 'Yes + resume' (pace + relaunch the task in THIS session under /loop, sleeping until the reset then continuing here = Variation B). On No run: claude-usage.ps1 -Decline -SessionId {2} | on Yes run: claude-usage.ps1 -SetMode A -SessionId {2} (then arm -ScheduleResume at the save-line) | on Yes + resume run: claude-usage.ps1 -SetMode B -SessionId {2} then re-launch the task under /loop (see CLAUDE.md). The choice is NOT one-shot - switch later with -SetMode no|A|B." -f $n, $usage, $id, $save, $askLine, $f5)
             }
             return
         }

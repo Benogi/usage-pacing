@@ -6,8 +6,9 @@ This line is INFORMATIONAL only — do NOT ask about pacing at session start. Ju
 handy; you'll need it if/when the opt-in is raised. Work normally.
 
 The opt-in is deferred until it actually matters: the per-prompt hook injects a
-`[usage-pacing] PACING OPT-IN ...` directive ONLY once this session's 5h usage nears the save-line
-(or weekly is already high). A session that never approaches the cap is never interrupted. That
+`[usage-pacing] PACING OPT-IN ...` directive ONLY once this session's 5h usage crosses the ask-line
+(an awareness level, ~75% — early enough that there's still room to pace, NOT right at the save-line)
+or weekly is already high. A session that never climbs past that line is never interrupted. That
 directive also carries the full path to `claude-usage.py` in its text.
 
 WHEN (and only when) you see that `PACING OPT-IN` directive, present the opt-in as a POLL using the

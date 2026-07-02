@@ -66,8 +66,10 @@ fire on a powered-off machine), but nothing runs unattended or with elevated tru
 1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage as
    INFORMATIONAL context only — the opt-in is NOT asked at session start.
 2. The opt-in is deferred until it matters: `-Gate` raises a `[usage-pacing] PACING OPT-IN` directive
-   only once this session's 5h usage reaches the **ask-line** (`save-line - AskAheadPct`, default 5%)
-   or weekly >= 85%. A session that never nears the cap is never interrupted. `~/.claude/CLAUDE.md`
+   only once this session's 5h usage crosses the **ask-line** (`AskPct`, default 75% — an awareness
+   level, NOT the save-line, so the ask lands with real room left to pace; clamped to stay
+   `AskAheadPct` below the save-line) or weekly >= 85%. A session that never climbs past ~75% is
+   never interrupted. `~/.claude/CLAUDE.md`
    then makes the agent present the opt-in as a **poll** (the `AskUserQuestion` tool, not a plain-text
    question), explaining what pacing is and showing the pool + usage. Three options, each describing
    its resume behavior:

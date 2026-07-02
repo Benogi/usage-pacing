@@ -88,8 +88,10 @@ stays awake. See protocol.md.
 1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage as
    INFORMATIONAL context only — the opt-in is NOT asked at session start.
 2. The opt-in is deferred until it matters: `--gate` raises a `[usage-pacing] PACING OPT-IN` directive
-   only once this session's 5h usage reaches the **ask-line** (`save-line - ASK_AHEAD_PCT`, default 5%)
-   or weekly ≥ 85%. A session that never nears the cap is never interrupted. `~/.claude/CLAUDE.md`
+   only once this session's 5h usage crosses the **ask-line** (`ASK_PCT`, default 75% — an awareness
+   level, NOT the save-line, so the ask lands with real room left to pace; clamped to stay
+   `ASK_AHEAD_PCT` below the save-line) or weekly ≥ 85%. A session that never climbs past ~75% is
+   never interrupted. `~/.claude/CLAUDE.md`
    then makes the agent present the opt-in as a **poll** (the `AskUserQuestion` tool, not plain text),
    explaining pacing and the pool. Three options:
    - **No** → `--decline` (pace nothing; never mention usage again).
