@@ -301,9 +301,12 @@ function PctColor { param([double]$Pct) if ($Pct -ge 90){'Red'}elseif($Pct -ge 7
 function Format-Span {
     param([timespan]$Ts)
     if ($Ts.TotalSeconds -le 0) { return 'now' }
-    if ($Ts.TotalHours -ge 24)  { return ('{0}d {1}h' -f [int]$Ts.TotalDays, $Ts.Hours) }
-    if ($Ts.TotalHours -ge 1)   { return ('{0}h {1}m' -f [int]$Ts.TotalHours, $Ts.Minutes) }
-    return ('{0}m' -f [int]$Ts.TotalMinutes)
+    # NOTE: PowerShell [int] ROUNDS to nearest (unlike C#/Python truncation), so [int]$Ts.TotalHours
+    # on a 4h31m span yields 5 -> a phantom "+1h". Floor the .Total* values so the leading unit is
+    # truncated to match the trailing component (.Hours/.Minutes are already truncated integer parts).
+    if ($Ts.TotalHours -ge 24)  { return ('{0}d {1}h' -f [int][math]::Floor($Ts.TotalDays),  $Ts.Hours) }
+    if ($Ts.TotalHours -ge 1)   { return ('{0}h {1}m' -f [int][math]::Floor($Ts.TotalHours), $Ts.Minutes) }
+    return ('{0}m' -f [int][math]::Floor($Ts.TotalMinutes))
 }
 
 # --- hook modes -------------------------------------------------------------
