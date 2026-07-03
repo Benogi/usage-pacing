@@ -74,10 +74,10 @@ fire on a powered-off machine), but nothing runs unattended or with elevated tru
    question), explaining what pacing is and showing the pool + usage. Three options, each describing
    its resume behavior:
    - **No** -> `-Decline` (pace nothing; never mention usage again).
-   - **Yes** -> `-SetMode A` (joins + records **Variation A**; at the save-line it arms a forked-tab
+   - **Option A** -> `-SetMode A` (joins + records **Variation A**; at the save-line it arms a forked-tab
      scheduled resume with `-ScheduleResume`).
-   - **Yes + resume** -> `-SetMode B` then relaunch the task under `/loop` for **Variation B**.
-   Both Yes options need the tab left open + the PC not shut down/restarted; closing/Ctrl+C cancels
+   - **Option B** -> `-SetMode B` then relaunch the task under `/loop` for **Variation B**.
+   Both Option A and Option B need the tab left open + the PC not shut down/restarted; closing/Ctrl+C cancels
    the pending resume and drops the session from the pool. The choice isn't one-shot - the user can
    switch anytime with `-SetMode <no|A|B>` (cancels any pending resume, then re-points the resume path).
 3. `UserPromptSubmit` hook runs `-Gate` every prompt: for joined sessions it heartbeats and,

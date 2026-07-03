@@ -95,8 +95,8 @@ stays awake. See protocol.md.
    then makes the agent present the opt-in as a **poll** (the `AskUserQuestion` tool, not plain text),
    explaining pacing and the pool. Three options:
    - **No** → `--decline` (pace nothing; never mention usage again).
-   - **Yes** → `--set-mode A` (joins + Variation A; at the save-line arm `--schedule-resume`).
-   - **Yes + resume** → `--set-mode B` then relaunch under `/loop` for Variation B.
+   - **Option A** → `--set-mode A` (joins + Variation A; at the save-line arm `--schedule-resume`).
+   - **Option B** → `--set-mode B` then relaunch under `/loop` for Variation B.
 3. `--gate` also, for joined sessions, heartbeats every prompt and once 5h hits the save-line
    (or weekly hits 85%), injects usage + ACTION directives.
 4. Sessions drop from the count when heartbeat goes stale, UNLESS `resumeArmed` is set — those

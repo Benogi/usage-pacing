@@ -27,12 +27,12 @@ scaled down on Max plans. So with 1 session ~97%, 3 sessions ~88%, 5 ~82%.
 
 ## Auto-resuming after the 5h reset
 The opt-in choice already decides the variation (don't ask again):
-- **`Yes` -> Variation A - visible scheduled resume** (Windows Scheduled Task; unattended; forks
+- **`Option A` -> Variation A - visible scheduled resume** (Windows Scheduled Task; unattended; forks
   into a new tab). Arm it at the save-line with `-ScheduleResume`.
-- **`Yes + resume` -> Variation B - in-harness `/loop` resume** (stays in THIS tab; attended
+- **`Option B` -> Variation B - in-harness `/loop` resume** (stays in THIS tab; attended
   permissions; SAFER). Already relaunched under `/loop` at opt-in.
 - **`No` -> no auto-resume** - just hand off at the save-line.
-Both Yes variations fire ONLY while this terminal stays open and the PC isn't shut down/restarted.
+Both Option A and Option B fire ONLY while this terminal stays open and the PC isn't shut down/restarted.
 
 ### Switching modes mid-session (the choice is not one-shot)
 The opt-in only sets a starting mode; the user can change it anytime. When they ask to switch, run:
@@ -43,7 +43,7 @@ session file (`resumeMode`), which is why the SAVE-NOW gate can then name the ri
 - **-> `A`**: pacing on, resume = the scheduled forked tab. Nothing to launch now; arm with
   `-ScheduleResume` at the save-line. If you were under `/loop` for B, you can end the loop.
 - **-> `B`**: pacing on, resume = in-harness `/loop`. Relaunch the task under `/loop` now (invoke the
-  `loop` skill, NO interval) so `ScheduleWakeup` exists at the save-line. Same fallback as YES+RESUME:
+  `loop` skill, NO interval) so `ScheduleWakeup` exists at the save-line. Same fallback as Option B:
   if you can't get a working dynamic loop, tell the user or fall back to A.
 - **-> `no`**: leave the pool entirely (declined); any pending resume is cancelled. If you were under
   `/loop` for B, end the loop.
@@ -72,7 +72,7 @@ NO folder-trust flip, and NO `--dangerously-skip-permissions`. The session stays
 tab and just sleeps until the window resets, then continues with NORMAL permissions (you're still
 the one driving; the user is watching). Cost: it only works while this tab stays open under `/loop`
 and the PC stays awake (a sleeping `ScheduleWakeup` won't fire on a shut-down machine).
-Entering B: if the user picked **yes+resume** at the opt-in, you ALREADY relaunched the task under
+Entering B: if the user picked **Option B** at the opt-in, you ALREADY relaunched the task under
 `/loop` then (see CLAUDE.md) - you're set. Otherwise you can enter B on request at any time.
 Requirements & steps:
 1. This session must be running under `/loop` (that's what makes `ScheduleWakeup` available). If it

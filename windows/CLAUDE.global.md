@@ -17,17 +17,17 @@ live usage from the directive so the choice is informed.
 - **Question (explain what pacing is, docstring-style):** "Usage pacing watches your Claude usage —
   the rolling 5h limit and the weekly limit — across every open session, and quietly nudges me to
   slow down and save progress before you hit a cap, so a long task doesn't get cut off mid-work.
-  Heads-up: a Yes session keeps its slot in the pool while it's working OR waiting to auto-resume —
+  Heads-up: an opted-in session (Option A or B) keeps its slot in the pool while it's working OR waiting to auto-resume —
   idling is fine, it'll wake itself at the reset. Closing this tab or pressing Ctrl+C (the normal way
   to end a session) cancels that pending resume and drops it from the pool.
   Right now: <N> session(s) pacing; usage X% (5h) / Y% (weekly). Enable it for this session?"
 - **Header:** `Usage pace` (≤12 chars).
 - **Options (3, each with an explanatory description):**
   - `No` — "Don't pace this session. I'll work normally and won't bring up usage again."
-  - `Yes` — "Pace this session, and set a timer that at the 5h reset forks the session into a NEW
+  - `Option A` — "Pace this session, and set a timer that at the 5h reset forks the session into a NEW
     tab (unattended, bypassing the folder-trust prompt) and continues the work on its own. Only
     works while this Terminal stays open and the PC isn't shut down or restarted."
-  - `Yes + resume` — "Pace this session, but instead of a new tab, relaunch this task in THIS
+  - `Option B` — "Pace this session, but instead of a new tab, relaunch this task in THIS
     active session under /loop — it sleeps in place until the limit resets, then continues right
     here with normal permissions. Same requirement: Terminal stays open and the PC stays awake."
 
@@ -36,11 +36,11 @@ The per-prompt hook keeps re-injecting the `PACING OPT-IN` directive each turn u
 
 - **NO** — record the decline so the prompt stops, then proceed normally and don't mention usage again:
   `... claude-usage.ps1 -Decline -SessionId <ID>`
-- **YES** — join the shared pool in **Variation A** (the visible scheduled resume), then read & follow
+- **OPTION A** — join the shared pool in **Variation A** (the visible scheduled resume), then read & follow
   `protocol.md`: keep working normally, and at the save-line arm the forked-tab timer with
   `-ScheduleResume` (it self-cancels if the terminal was closed or the PC restarted).
   `... claude-usage.ps1 -SetMode A -SessionId <ID>`  (`-SetMode A` both joins and records the mode)
-- **YES+RESUME** — join in **Variation B**, THEN set up the safer in-harness auto-resume:
+- **OPTION B** — join in **Variation B**, THEN set up the safer in-harness auto-resume:
   `... claude-usage.ps1 -SetMode B -SessionId <ID>`, and
   re-launch the user's task under `/loop` so the `ScheduleWakeup` tool is available later (Variation B).
   Do this by
@@ -59,7 +59,7 @@ The per-prompt hook keeps re-injecting the `PACING OPT-IN` directive each turn u
 `... claude-usage.ps1 -SetMode <no|A|B> -SessionId <ID>` and do what the printed directive says:
 `no` leaves the pool, `A` is the scheduled-tab resume, `B` is the in-harness `/loop` resume. Switching
 always cancels any pending resume first, so it's safe to flip anytime. Going **to B** means relaunching
-under `/loop` (as in YES+RESUME); leaving **from B** means ending the `/loop` if one is running.
+under `/loop` (as in Option B); leaving **from B** means ending the `/loop` if one is running.
 
 Use the exact `<ID>` from the injected line. Once joined you'll get nothing until usage is high
 enough to matter, then a `[claude-usage] ... ACTION ...` line each prompt — just follow the ACTION.
