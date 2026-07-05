@@ -60,7 +60,19 @@ that long, re-pass the same `/loop` prompt, re-check on wake), `RESUME` (window 
 saved work), `STOP` (weekly >= 85% - hand off), or `WAIT <secs>` (usage unreadable - back off).
 `<secs>` is clamped to <= 3300 so longer waits chain across several wakes. Trade-off vs A: B only
 works while the tab stays open under `/loop` AND the PC stays awake (a sleeping ScheduleWakeup won't
-fire on a powered-off machine), but nothing runs unattended or with elevated trust. See protocol.md.
+fire on a powered-off machine), but nothing runs unattended or with elevated trust. Limitation: each
+chained re-arm hop is itself a model call, so if the 5h limit is ALREADY fully hit with the reset
+more than ~1 hour (one hop) away, that re-arm is blocked by the cap and B can't bridge to the reset
+(single-hop waits are safe — the one wake lands just after the reset); use Variation A in that
+already-maxed-with-a-long-wait case. See protocol.md.
+
+### Fleet-aware pacing (background subagents)
+Only the main session receives the hook; background subagents (Agent tool `run_in_background`,
+FleetView/Task tasks) don't, so they can't pace themselves and would crash on the cap mid-work. A
+paced supervisor session controls its fleet: at the notice-line it stops dispatching new background
+work, at the save-line (before it stops/sleeps) it checkpoints and `TaskStop`s each running subagent
+and records how to relaunch it, and on `RESUME` after the reset it re-spawns the fleet as well as
+itself. See protocol.md → "Fleets / background subagents".
 
 ## Flow
 1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage as

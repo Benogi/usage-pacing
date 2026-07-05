@@ -18,6 +18,9 @@ live usage from the directive so the choice is informed.
 - **Question (explain what pacing is, docstring-style):** "Usage pacing watches your Claude usage —
   the rolling 5h limit and the weekly limit — across every open session, and quietly nudges me to
   slow down and save progress before you hit a cap, so a long task doesn't get cut off mid-work.
+  If this session is supervising a fleet of background subagents, pacing also covers them: they
+  don't get the pacing hook and can't pace themselves, so at the save-line I pause the whole fleet
+  (checkpoint + stop each) before it crashes on the cap, and relaunch it after the reset.
   Heads-up: an opted-in session (Option A or B) keeps its slot in the pool while it's working OR waiting to auto-resume —
   idling is fine, it'll wake itself at the reset. Closing this terminal or pressing Ctrl+C (the
   normal way to end a session) cancels that pending resume and drops it from the pool.
@@ -31,7 +34,14 @@ live usage from the directive so the choice is informed.
     the PC isn't shut down or restarted."
   - `Option B` — "Pace this session, but instead of a new window, relaunch this task in THIS
     active session under /loop — it sleeps in place until the limit resets, then continues right
-    here with normal permissions. Same requirement: terminal stays open and the PC stays awake."
+    here with normal permissions. Same requirement: terminal stays open and the PC stays awake.
+    Limitation: /loop can only sleep in ~1-hour hops and must wake to RE-ARM each hop, and that
+    re-arm is itself a model call. So if the 5h limit is ALREADY fully hit (100%) with the reset
+    still more than ~1 hour away, the first re-arm wake is blocked by the cap and the loop can't
+    bridge to the reset — in that already-maxed-with-a-long-wait case pick Option A instead, whose
+    'at' job fires independently of the cap. (B bridges fine when armed with headroom, i.e. at the
+    save-line below 100%, as long as nothing — like an unpaused fleet — drives usage to 100% during
+    the sleep.)"
 
 The per-prompt hook keeps re-injecting the `PACING OPT-IN` directive each turn until you answer it
 (join or decline), so once it appears, resolve it rather than talking past it.
@@ -56,6 +66,15 @@ The per-prompt hook keeps re-injecting the `PACING OPT-IN` directive each turn u
   - **Trade-off to state once:** this runs the WHOLE session in `/loop` (self-paced), and B only
     survives while this terminal stays open and the PC stays awake. If the user wants normal interaction
     and is fine with the unattended scheduled resume, point them to Variation A instead.
+
+**Fleets (applies to Option A and Option B).** If this session is supervising background subagents
+or tasks (Agent tool with `run_in_background`, FleetView/Task tasks), they do NOT receive the pacing
+hook and won't pace themselves — left running they'll crash on the cap mid-work. So as their
+supervisor you pace them too: at the notice-line stop dispatching new background work; at the
+save-line (before you stop or sleep) quiesce the fleet — `TaskList` to enumerate, `SendMessage` each
+to checkpoint its progress, then `TaskStop` it, recording in `PROGRESS.md` how to relaunch each; and
+on RESUME after the reset, wake yourself AND relaunch the fleet from those checkpoints. Full steps
+in `protocol.md` → "Fleets / background subagents".
 
 **The choice is NOT one-shot.** If the user later wants to change their mind, switch with
 `python3 <script> --set-mode <no|A|B> --session-id <ID>` and do what the printed directive says:

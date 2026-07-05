@@ -456,7 +456,9 @@ def show_gate(sid):
                     f"[usage-pacing] PACING OPT-IN (5h {f5:.0f}% crossed the ask-line {ask_line:.0f}%, with room left before the save-line {save:.0f}%): NOW "
                     f"present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that "
                     f"usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save "
-                    f"progress before a cap. Show: '{n} session(s) currently pacing; usage {usage}; save-line "
+                    f"progress before a cap. If this session is supervising a fleet of background subagents/tasks, "
+                    f"add that pacing also pauses them before the cap (they don't pace themselves and would crash "
+                    f"mid-work) and relaunches them after the reset. Show: '{n} session(s) currently pacing; usage {usage}; save-line "
                     f"{save:.0f}%.' Also warn: an opted-in (Option A/B) session keeps its pool slot while working OR "
                     f"idling-but-waiting-to-resume (it wakes itself at the reset), but closing the tab / Ctrl+C "
                     f"cancels the pending resume and drops it from the pool. Three options with explanatory "
@@ -486,7 +488,7 @@ def show_gate(sid):
 
         print(f"[claude-usage] 5h {f5:.0f}% (resets in {format_span(s5)} / {s5}s) | weekly {f7:.0f}% | {n} sessions pacing | save-line {save:.0f}%")
         if at_save:
-            print(f"ACTION SAVE NOW (5h {f5:.0f}% >= save-line {save:.0f}%): finish the current step, write/update PROGRESS.md, then pause / hand off. Room is reserved for {n} session(s) to save - don't overrun it.")
+            print(f"ACTION SAVE NOW (5h {f5:.0f}% >= save-line {save:.0f}%): finish the current step, write/update PROGRESS.md, then pause / hand off. Room is reserved for {n} session(s) to save - don't overrun it. FLEET: if you're supervising background subagents/tasks they do NOT see this hook and will crash on the cap mid-work - quiesce them NOW: TaskList to enumerate, tell each (SendMessage) to checkpoint its progress, then TaskStop it, and record in PROGRESS.md what each was doing + how to relaunch it after the reset.")
             mode = get_resume_mode(id_)
             if f7 < 85:
                 if mode == 'A':
@@ -494,9 +496,9 @@ def show_gate(sid):
                 elif mode == 'B':
                     print("ACTION RESUME (mode B): you're under /loop - run --loop-resume --session-id <id> and follow its SLEEP/RESUME/STOP/WAIT directive.")
         elif at_note:
-            print(f"ACTION (5h {f5:.0f}%): prefer short, finishable tasks. Save-line {save:.0f}% ({n} session(s) pacing); be ready to write PROGRESS.md and hand off there.")
+            print(f"ACTION (5h {f5:.0f}%): prefer short, finishable tasks. Save-line {save:.0f}% ({n} session(s) pacing); be ready to write PROGRESS.md and hand off there. If you're supervising a fleet, stop DISPATCHING new background subagents/tasks now (a fleet drains the 5h budget far faster) - let in-flight ones finish but don't start long fresh work that can't complete before the save-line.")
         if at_week:
-            print(f"ACTION (weekly {f7:.0f}% >= 85%): STOP auto-reawakening in this session - do NOT schedule wakeups. Hand off and let the user resume manually.")
+            print(f"ACTION (weekly {f7:.0f}% >= 85%): STOP auto-reawakening in this session - do NOT schedule wakeups. Stop any background subagents/tasks (TaskList -> TaskStop) so they don't drain the weekly budget. Hand off and let the user resume manually.")
     except:
         pass
 
@@ -877,19 +879,26 @@ def invoke_loop_resume(sid, test_five=None):
         if f7 >= 85:
             if id_:
                 set_resume_armed(id_, False)
-            print(f"[loop-resume] STOP: weekly {f7:.0f}% >= 85% - do NOT keep looping. Write/refresh PROGRESS.md, end the loop, and let the user resume manually.")
+            print(f"[loop-resume] STOP: weekly {f7:.0f}% >= 85% - do NOT keep looping. Stop any background subagents/tasks (TaskList -> TaskStop) so they don't drain the weekly budget, write/refresh PROGRESS.md, end the loop, and let the user resume manually.")
             return
         if f5 < save:
             if id_:
                 set_resume_armed(id_, False)
-            print(f"[loop-resume] RESUME: 5h {f5:.0f}% < save-line {save:.0f}% - the window reset, room is back. Stop sleeping and continue the saved work now.")
+            print(f"[loop-resume] RESUME: 5h {f5:.0f}% < save-line {save:.0f}% - the window reset, room is back. Stop sleeping, RELAUNCH any subagents/tasks you paced down before the sleep (re-spawn from their checkpoints in PROGRESS.md, or SendMessage to continue one whose context is intact), then continue the saved work now.")
             return
         if id_:
             set_resume_armed(id_, True)
         s5    = secs_to(cu['five_reset'])
+        multi_hop = (s5 + 60) > 3300   # reset is >1 ScheduleWakeup hop away -> must chain re-arms
         delay = min(s5 + 60, 3300)
         delay = max(delay, 60)
-        print(f"[loop-resume] SLEEP {delay}: 5h {f5:.0f}% still >= save-line {save:.0f}%; ~{s5}s ({format_span(s5)}) to reset. ScheduleWakeup({delay}) with the SAME /loop prompt, then run --loop-resume again on wake.")
+        # Danger case: a chained (multi-hop) wait while already at the hard cap. The next re-arm wake
+        # is itself a model call, and a fully-capped 5h window blocks it, so the loop can't bridge to
+        # the reset. Single-hop waits are safe (the one wake lands just after the reset). Flag it.
+        cap_warn = ""
+        if multi_hop and f5 >= 99:
+            cap_warn = " WARNING: 5h is at the hard cap and the reset is >1 hop (~55min) away, so this is a CHAINED wait - the NEXT re-arm wake is a model call the cap will block, and Variation B may not bridge to the reset. Consider switching to Variation A (at job, fires independently of the cap): run --set-mode A then --schedule-resume, or hand off."
+        print(f"[loop-resume] SLEEP {delay}: 5h {f5:.0f}% still >= save-line {save:.0f}%; ~{s5}s ({format_span(s5)}) to reset. Before you sleep, make sure any background subagents/tasks are STOPPED with progress checkpointed (TaskList -> TaskStop; they don't pause themselves and would burn the cap and crash while you sleep). Then ScheduleWakeup({delay}) with the SAME /loop prompt, and run --loop-resume again on wake.{cap_warn}")
     except:
         print("[loop-resume] WAIT 600: error reading usage - ScheduleWakeup(600) with the same /loop prompt and re-run --loop-resume.")
 

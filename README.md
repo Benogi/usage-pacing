@@ -47,7 +47,11 @@ Claude sees `ACTION SAVE NOW`, finishes the current step, writes `PROGRESS.md`, 
 Two variations, both opt-in per session:
 
 - **Variation A** — schedules an OS task (Linux `at`, Windows Task Scheduler) that opens a new terminal and runs `claude --resume` at the exact reset time. Unattended; requires the machine to stay on.
-- **Variation B** — stays in the current session under `/loop`, sleeps with `ScheduleWakeup` until the reset, then continues with normal permissions. Safer; no new window, no elevated trust.
+- **Variation B** — stays in the current session under `/loop`, sleeps with `ScheduleWakeup` until the reset, then continues with normal permissions. Safer; no new window, no elevated trust. Limitation: `ScheduleWakeup` maxes at ~1 hour, so longer waits chain hops that each need a live model call to re-arm — if the 5h limit is *already* fully hit with the reset more than ~1 hour away, that re-arm is blocked by the cap and B can't bridge to the reset. Prefer Variation A in that already-maxed-with-a-long-wait case.
+
+## Fleet-aware pacing
+
+Only the main session receives the hook — background subagents (Agent tool `run_in_background`, FleetView/Task tasks) don't, so they can't pace themselves and would crash on the cap mid-work. When a paced session is supervising a fleet, it acts as the fleet's pacing controller: at the save-line (before it stops or sleeps) it checkpoints and `TaskStop`s each running subagent and records how to relaunch it, then re-spawns the whole fleet after the reset.
 
 ## Platforms
 

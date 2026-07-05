@@ -82,7 +82,18 @@ session stays in its own live terminal under `/loop` and sleeps via the harness 
 tool until the 5h window resets, then continues with NORMAL (attended) permissions. The agent runs
 `--loop-resume` once per `/loop` wake and gets one directive: `SLEEP <secs>`, `RESUME`, `STOP`,
 or `WAIT <secs>`. Trade-off: B only works while the terminal stays open under `/loop` AND the PC
-stays awake. See protocol.md.
+stays awake. Also: `ScheduleWakeup` maxes at ~1 hour, so waits longer than that chain hops that
+each need a live model call to re-arm — if the 5h limit is ALREADY fully hit with the reset more
+than ~1 hour away, that re-arm is blocked by the cap and B can't bridge to the reset (single-hop
+waits are safe); use Variation A in that already-maxed-with-a-long-wait case. See protocol.md.
+
+### Fleets / background subagents
+Only the main session gets the hook; background subagents (Agent tool `run_in_background`,
+FleetView/Task tasks) don't, so they can't pace themselves and would crash on the cap mid-work. A
+paced supervisor session controls its fleet: at the notice-line it stops dispatching new background
+work, at the save-line (before it stops/sleeps) it checkpoints and `TaskStop`s each running
+subagent and records how to relaunch it, and on `RESUME` after the reset it re-spawns the fleet as
+well as itself. See protocol.md → "Fleets / background subagents".
 
 ## Flow
 1. `~/.claude/settings.json` `SessionStart` hook injects the session id + current pool + usage as

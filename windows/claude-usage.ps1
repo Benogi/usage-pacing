@@ -354,7 +354,7 @@ function Show-Gate {
             $askLine = [math]::Min($AskPct, $save - $AskAheadPct)
             if ($f5 -ge $askLine -or $f7 -ge 85) {
                 $usage = ("{0:N0}% (5h) / {1:N0}% (weekly)" -f $f5, $f7)
-                Write-Output ("[usage-pacing] PACING OPT-IN (5h {5:N0}% crossed the ask-line {4:N0}%, with room left before the save-line {3:N0}%): NOW present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save progress before a cap. Show: '{0} session(s) currently pacing; usage {1}; save-line {3:N0}%.' Also warn: an opted-in (Option A/B) session keeps its pool slot while working OR idling-but-waiting-to-resume (it wakes itself at the reset), but closing the tab / Ctrl+C cancels the pending resume and drops it from the pool. Three options with explanatory descriptions (both Option A and Option B need this Terminal left open + the PC not shut down/restarted): 'No' (don't pace, work normally), 'Option A' (pace + at the 5h reset fork the session into a NEW tab, bypassing folder trust, and continue the work = Variation A), 'Option B' (pace + relaunch the task in THIS session under /loop, sleeping until the reset then continuing here = Variation B). On No run: claude-usage.ps1 -Decline -SessionId {2} | on Option A run: claude-usage.ps1 -SetMode A -SessionId {2} (then arm -ScheduleResume at the save-line) | on Option B run: claude-usage.ps1 -SetMode B -SessionId {2} then re-launch the task under /loop (see CLAUDE.md). The choice is NOT one-shot - switch later with -SetMode no|A|B." -f $n, $usage, $id, $save, $askLine, $f5)
+                Write-Output ("[usage-pacing] PACING OPT-IN (5h {5:N0}% crossed the ask-line {4:N0}%, with room left before the save-line {3:N0}%): NOW present the opt-in as a POLL via the AskUserQuestion tool (NOT plain text). Explain that usage pacing watches your 5h + weekly Claude usage across sessions and nudges you to save progress before a cap. If this session is supervising a fleet of background subagents/tasks, add that pacing also pauses them before the cap (they don't pace themselves and would crash mid-work) and relaunches them after the reset. Show: '{0} session(s) currently pacing; usage {1}; save-line {3:N0}%.' Also warn: an opted-in (Option A/B) session keeps its pool slot while working OR idling-but-waiting-to-resume (it wakes itself at the reset), but closing the tab / Ctrl+C cancels the pending resume and drops it from the pool. Three options with explanatory descriptions (both Option A and Option B need this Terminal left open + the PC not shut down/restarted): 'No' (don't pace, work normally), 'Option A' (pace + at the 5h reset fork the session into a NEW tab, bypassing folder trust, and continue the work = Variation A), 'Option B' (pace + relaunch the task in THIS session under /loop, sleeping until the reset then continuing here = Variation B). On No run: claude-usage.ps1 -Decline -SessionId {2} | on Option A run: claude-usage.ps1 -SetMode A -SessionId {2} (then arm -ScheduleResume at the save-line) | on Option B run: claude-usage.ps1 -SetMode B -SessionId {2} then re-launch the task under /loop (see CLAUDE.md). The choice is NOT one-shot - switch later with -SetMode no|A|B." -f $n, $usage, $id, $save, $askLine, $f5)
             }
             return
         }
@@ -372,16 +372,16 @@ function Show-Gate {
 
         Write-Output ("[claude-usage] 5h {0:N0}% (resets in {1} / {2}s) | weekly {3:N0}% | {4} sessions pacing | save-line {5:N0}%" -f $f5,(Format-Span ([timespan]::FromSeconds($s5))),$s5,$f7,$n,$save)
         if ($atSave) {
-            Write-Output ("ACTION SAVE NOW (5h {0:N0}% >= save-line {1:N0}%): finish the current step, write/update PROGRESS.md, then pause / hand off. Room is reserved for {2} session(s) to save - don't overrun it." -f $f5,$save,$n)
+            Write-Output ("ACTION SAVE NOW (5h {0:N0}% >= save-line {1:N0}%): finish the current step, write/update PROGRESS.md, then pause / hand off. Room is reserved for {2} session(s) to save - don't overrun it. FLEET: if you're supervising background subagents/tasks they do NOT see this hook and will crash on the cap mid-work - quiesce them NOW: TaskList to enumerate, tell each (SendMessage) to checkpoint its progress, then TaskStop it, and record in PROGRESS.md what each was doing + how to relaunch it after the reset." -f $f5,$save,$n)
             switch (Get-ResumeMode $id) {
                 'A' { if ($f7 -lt 85) { Write-Output "ACTION RESUME (mode A): arm the visible scheduled resume now - run -ScheduleResume -SessionId <id> [-WorkDir <dir>], then stop." } }
                 'B' { if ($f7 -lt 85) { Write-Output "ACTION RESUME (mode B): you're under /loop - run -LoopResume -SessionId <id> and follow its SLEEP/RESUME/STOP/WAIT directive." } }
             }
         } elseif ($atNote) {
-            Write-Output ("ACTION (5h {0:N0}%): prefer short, finishable tasks. Save-line {1:N0}% ({2} session(s) pacing); be ready to write PROGRESS.md and hand off there." -f $f5,$save,$n)
+            Write-Output ("ACTION (5h {0:N0}%): prefer short, finishable tasks. Save-line {1:N0}% ({2} session(s) pacing); be ready to write PROGRESS.md and hand off there. If you're supervising a fleet, stop DISPATCHING new background subagents/tasks now (a fleet drains the 5h budget far faster) - let in-flight ones finish but don't start long fresh work that can't complete before the save-line." -f $f5,$save,$n)
         }
         if ($atWeek) {
-            Write-Output ("ACTION (weekly {0:N0}% >= 85%): STOP auto-reawakening in this session - do NOT schedule wakeups. Hand off and let the user resume manually." -f $f7)
+            Write-Output ("ACTION (weekly {0:N0}% >= 85%): STOP auto-reawakening in this session - do NOT schedule wakeups. Stop any background subagents/tasks (TaskList -> TaskStop) so they don't drain the weekly budget. Hand off and let the user resume manually." -f $f7)
         }
     } catch { }
 }
@@ -531,20 +531,28 @@ function Invoke-LoopResume {
         $save = Get-SaveLine -ActiveCount $n
         if ($f7 -ge 85) {
             if ($id) { Set-ResumeArmed -Id $id -Armed $false }   # loop ending -> no longer a pending resume
-            Write-Output ("[loop-resume] STOP: weekly {0:N0}% >= 85% - do NOT keep looping. Write/refresh PROGRESS.md, end the loop, and let the user resume manually." -f $f7)
+            Write-Output ("[loop-resume] STOP: weekly {0:N0}% >= 85% - do NOT keep looping. Stop any background subagents/tasks (TaskList -> TaskStop) so they don't drain the weekly budget, write/refresh PROGRESS.md, end the loop, and let the user resume manually." -f $f7)
             return
         }
         if ($f5 -lt $save) {
             if ($id) { Set-ResumeArmed -Id $id -Armed $false }   # resumed (active again) -> back to normal heartbeat
-            Write-Output ("[loop-resume] RESUME: 5h {0:N0}% < save-line {1:N0}% - the window reset, room is back. Stop sleeping and continue the saved work now." -f $f5,$save)
+            Write-Output ("[loop-resume] RESUME: 5h {0:N0}% < save-line {1:N0}% - the window reset, room is back. Stop sleeping, RELAUNCH any subagents/tasks you paced down before the sleep (re-spawn from their checkpoints in PROGRESS.md, or SendMessage to continue one whose context is intact), then continue the saved work now." -f $f5,$save)
             return
         }
         if ($id) { Set-ResumeArmed -Id $id -Armed $true }       # sleeping until reset -> stay counted between wakes
         $s5 = Secs-To $cu.fiveReset ([datetime]::UtcNow)
         $delay = $s5 + 60                                   # +1min so we wake just AFTER the reset
+        $multiHop = ($delay -gt 3300)                       # reset is >1 ScheduleWakeup hop away -> must chain re-arms
         if ($delay -gt 3300) { $delay = 3300 }             # ScheduleWakeup clamps to 3600; chain longer waits
         if ($delay -lt 60)   { $delay = 60 }
-        Write-Output ("[loop-resume] SLEEP {0}: 5h {1:N0}% still >= save-line {2:N0}%; ~{3}s ({4}) to reset. ScheduleWakeup({0}) with the SAME /loop prompt, then run -LoopResume again on wake." -f $delay,$f5,$save,$s5,(Format-Span ([timespan]::FromSeconds($s5))))
+        # Danger case: a chained (multi-hop) wait while already at the hard cap. The next re-arm wake
+        # is itself a model call, and a fully-capped 5h window blocks it, so the loop can't bridge to
+        # the reset. Single-hop waits are safe (the one wake lands just after the reset). Flag it.
+        $capWarn = ''
+        if ($multiHop -and $f5 -ge 99) {
+            $capWarn = " WARNING: 5h is at the hard cap and the reset is >1 hop (~55min) away, so this is a CHAINED wait - the NEXT re-arm wake is a model call the cap will block, and Variation B may not bridge to the reset. Consider switching to Variation A (scheduled task, fires independently of the cap): run -SetMode A then -ScheduleResume, or hand off."
+        }
+        Write-Output ("[loop-resume] SLEEP {0}: 5h {1:N0}% still >= save-line {2:N0}%; ~{3}s ({4}) to reset. Before you sleep, make sure any background subagents/tasks are STOPPED with progress checkpointed (TaskList -> TaskStop; they don't pause themselves and would burn the cap and crash while you sleep). Then ScheduleWakeup({0}) with the SAME /loop prompt, and run -LoopResume again on wake.{5}" -f $delay,$f5,$save,$s5,(Format-Span ([timespan]::FromSeconds($s5))),$capWarn)
     } catch { Write-Output "[loop-resume] WAIT 600: error reading usage - ScheduleWakeup(600) with the same /loop prompt and re-run -LoopResume." }
 }
 
