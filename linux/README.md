@@ -85,7 +85,8 @@ or `WAIT <secs>`. Trade-off: B only works while the terminal stays open under `/
 stays awake. Also: `ScheduleWakeup` maxes at ~1 hour, so waits longer than that chain hops that
 each need a live model call to re-arm — if the 5h limit is ALREADY fully hit with the reset more
 than ~1 hour away, that re-arm is blocked by the cap and B can't bridge to the reset (single-hop
-waits are safe); use Variation A in that already-maxed-with-a-long-wait case. See protocol.md.
+waits are safe). In that already-maxed-with-a-long-wait case B does NOT silently sleep or silently
+switch — it re-polls you to choose Variation A (unattended) or a manual hand-off. See protocol.md.
 
 ### Fleets / background subagents
 Only the main session gets the hook; background subagents (Agent tool `run_in_background`,

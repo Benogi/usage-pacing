@@ -35,13 +35,16 @@ live usage from the directive so the choice is informed.
   - `Option B` — "Pace this session, but instead of a new window, relaunch this task in THIS
     active session under /loop — it sleeps in place until the limit resets, then continues right
     here with normal permissions. Same requirement: terminal stays open and the PC stays awake.
-    Limitation: /loop can only sleep in ~1-hour hops and must wake to RE-ARM each hop, and that
-    re-arm is itself a model call. So if the 5h limit is ALREADY fully hit (100%) with the reset
-    still more than ~1 hour away, the first re-arm wake is blocked by the cap and the loop can't
-    bridge to the reset — in that already-maxed-with-a-long-wait case pick Option A instead, whose
-    'at' job fires independently of the cap. (B bridges fine when armed with headroom, i.e. at the
-    save-line below 100%, as long as nothing — like an unpaused fleet — drives usage to 100% during
-    the sleep.)"
+    Limitation + fallback: /loop can only sleep in ~1-hour hops and must wake to RE-ARM each hop,
+    and that re-arm is itself a model call. So if at arming the 5h limit is ALREADY fully hit (100%)
+    with the reset still more than ~1 hour away, the next re-arm wake would be blocked by the cap and
+    B can't bridge to the reset. In that already-maxed-with-a-long-wait case I won't silently sleep
+    or silently switch modes — I'll come back to you with a short poll: use Option A's
+    scheduled/UNATTENDED resume (fires independently of the cap), or hand off and resume manually.
+    Because B is the sleep-in-place mode, that poll only helps if you're at the terminal to answer
+    it; if you've stepped away, it won't resume on its own until you pick. B runs as B whenever it's
+    armed with headroom (at the save-line below 100%) and nothing — like an unpaused fleet — drives
+    usage to 100% during the sleep."
 
 The per-prompt hook keeps re-injecting the `PACING OPT-IN` directive each turn until you answer it
 (join or decline), so once it appears, resolve it rather than talking past it.

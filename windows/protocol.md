@@ -103,9 +103,10 @@ Requirements & steps:
 1. This session must be running under `/loop` (that's what makes `ScheduleWakeup` available). If it
    isn't, relaunch the task by invoking the `loop` skill (user's task, NO interval), or tell the
    user to type `/loop continue the work`, or fall back to Variation A.
-2. At the save-line: write/refresh PROGRESS.md, quiesce your fleet if you have one (TaskStop every
-   running background subagent, checkpoint each — they don't sleep with you and would crash on the
-   cap), then run
+2. At the save-line, IN THIS ORDER: FIRST quiesce your fleet if you have one — SendMessage each
+   running background subagent to checkpoint its progress, then TaskStop it (this halts the budget
+   drain immediately and captures their state; they don't sleep with you and would crash on the
+   cap); THEN write/refresh PROGRESS.md, including how to relaunch each subagent; THEN run
    `powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.claude\usage-pacing\windows\claude-usage.ps1 -LoopResume -SessionId <YOUR_ID>`
    and DO EXACTLY what the single directive line says:
    - `SLEEP <secs>` -> first confirm the fleet is stopped, then call
@@ -130,7 +131,16 @@ can't re-arm and never reaches the reset. The single-hop case is safe even at 10
 timed for just after the reset, when the cap has lifted). B is only reliable when you arm it with
 headroom (at the save-line, below 100%) and nothing drives usage to 100% during the sleep - which is
 another reason to pause the fleet before sleeping. When you're already maxed with a long wait to go,
-prefer Variation A: its Windows Scheduled Task fires independently of the model and the rate limit.
+do NOT sleep and do NOT silently arm a resume. Note the sequence: the save-line steps run FIRST
+(quiesce the fleet - checkpoint + TaskStop each subagent - THEN write PROGRESS.md), and only THEN does
+`-LoopResume` surface this condition - so by the time the poll appears the work is already halted and
+saved and the poll is ONLY about how to resume, not whether to stop. RE-RAISE the choice to the user
+as an AskUserQuestion poll (header "B cant bridge") offering Variation A (the scheduled/UNATTENDED resume, which fires
+independently of the model and the rate limit) or a plain hand-off (write PROGRESS.md and stop for a
+manual resume), and arm A only if they pick it. If they don't answer, nothing resumes - that's the
+accepted trade for not silently dropping into the unattended mode they chose B to avoid. The
+`-LoopResume` SLEEP directive prints this same instruction when it detects the condition
+(`multiHop && 5h >= 99`).
 
 Don't ration tokens or downgrade models otherwise — the goal is to pace around the reset and
 leave room for every session to save, not to save usage.

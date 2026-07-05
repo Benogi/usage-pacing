@@ -63,8 +63,9 @@ works while the tab stays open under `/loop` AND the PC stays awake (a sleeping 
 fire on a powered-off machine), but nothing runs unattended or with elevated trust. Limitation: each
 chained re-arm hop is itself a model call, so if the 5h limit is ALREADY fully hit with the reset
 more than ~1 hour (one hop) away, that re-arm is blocked by the cap and B can't bridge to the reset
-(single-hop waits are safe — the one wake lands just after the reset); use Variation A in that
-already-maxed-with-a-long-wait case. See protocol.md.
+(single-hop waits are safe — the one wake lands just after the reset). In that already-maxed-with-a-
+long-wait case B does NOT silently sleep or silently switch — it re-polls you to choose Variation A
+(unattended) or a manual hand-off. See protocol.md.
 
 ### Fleet-aware pacing (background subagents)
 Only the main session receives the hook; background subagents (Agent tool `run_in_background`,
