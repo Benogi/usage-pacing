@@ -14,7 +14,7 @@ Manual check: `powershell -File $env:USERPROFILE\.claude\usage-pacing\windows\cl
 `save-line` is the 5h % at which you must wind down. It TIGHTENS as more sessions pace, because
 all paced sessions share ONE account budget and each needs ~one handoff's worth of room to save:
 `save-line = 100 - (reserve-per-session x (sessions + 1))`, reserve-per-session = 3% on Pro,
-scaled down on Max plans. So with 1 session ~97%, 3 sessions ~88%, 5 ~82%.
+scaled down on Max plans. So with 1 session 94%, 3 sessions 88%, 5 82%.
 
 ## What to do on each ACTION
 - **`ACTION (5h ..)` notice (5h >= 75%, below save-line):** prefer short, finishable tasks; don't
