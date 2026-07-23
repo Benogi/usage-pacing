@@ -45,7 +45,14 @@ RESUME_DIR  = os.path.join(SCRIPT_DIR, 'resume')
 
 PRO_RESERVE = 3.0   # % of Pro budget reserved per paced session (anchor)
 ACTIVE_SEC  = 360   # heartbeat window: session counts as active within this
-STALE_SEC   = 86400 # prune unarmed session files older than this
+STALE_SEC   = 86400 # prune UNARMED session files older than this
+ARMED_STALE_SEC   = 7200   # armed Variation-B (/loop) cap. A live sleeping B loop re-arms + heartbeats on
+                           # every ScheduleWakeup wake, at most one hop (<=3300s) apart; if an armed-B
+                           # session hasn't been seen this long it CANNOT be a live loop (tab closed /
+                           # crashed / killed) -> phantom, prune it. Kept > one hop + slack.
+ARMED_STALE_SEC_A = 21600  # armed Variation-A (scheduled resume) cap. An armed-A session may sit idle with
+                           # a frozen lastSeen until its resume fires at the reset (<=5h away) and clears
+                           # the flag. Only past a full window + margin (6h) is it a phantom (never fired).
 NOTICE_PCT  = 75    # soft-notice threshold (5h%)
 ASK_PCT     = 75    # unresolved sessions are asked the opt-in once 5h crosses THIS line — anchored to
                     # awareness (not the save-line) so the ask lands with real room left to pace
@@ -235,6 +242,18 @@ def set_declined(id_):
 
 
 def get_joined_active_count():
+    # Count joined sessions active within ACTIVE_SEC OR with a LIVE pending auto-resume armed. Prune
+    # dead/phantom files. "Armed" alone is NOT proof a session is alive - trusting it forever is the
+    # phantom-session bug: a Variation-B (/loop) session closed uncleanly (tab shut without Ctrl+C,
+    # crash, kill) leaves resumeArmed=true with nothing to ever clear it, so it counted toward the pool
+    # permanently and tightened every other session's save-line. The variations differ in what backs the
+    # armed flag, so pruning is mode-aware:
+    #   * Variation A: a scheduled resume + runner is the out-of-band backing; at the reset it fires (or
+    #     skips if the tab was closed / rebooted) and ALWAYS clears the flag, self-healing within ~one 5h
+    #     window. Phantom only if still armed past ARMED_STALE_SEC_A.
+    #   * Variation B: nothing out-of-band backs it - only the live /loop calling loop-resume sets/clears
+    #     it, heartbeating at most one ScheduleWakeup hop apart. So an armed-B session older than
+    #     ARMED_STALE_SEC is provably dead and is pruned.
     if not os.path.exists(SESSIONS_DIR):
         return 0
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -248,10 +267,20 @@ def get_joined_active_count():
                 s = json.load(f)
             last_seen = _parse_iso(s['lastSeen'])
             age = (now - last_seen).total_seconds()
-            if age > STALE_SEC and not s.get('resumeArmed'):
+            armed = bool(s.get('resumeArmed'))
+            # Per-session staleness ceiling: unarmed -> long STALE_SEC grace; armed -> a mode-specific
+            # "is this resume still live?" cap. Unknown/none mode falls to the stricter B cap (B has no
+            # out-of-band backing, so defaulting to it clears phantoms fastest).
+            if not armed:
+                cap = STALE_SEC
+            elif s.get('resumeMode') == 'A':
+                cap = ARMED_STALE_SEC_A
+            else:
+                cap = ARMED_STALE_SEC
+            if age > cap:
                 os.remove(fpath)
                 continue
-            if s.get('joined') and (age <= ACTIVE_SEC or s.get('resumeArmed')):
+            if s.get('joined') and (age <= ACTIVE_SEC or armed):
                 n += 1
         except:
             pass

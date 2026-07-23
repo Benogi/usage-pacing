@@ -53,7 +53,15 @@ $SessionsDir  = Join-Path $PSScriptRoot 'sessions'
 $ResumeDir    = Join-Path $PSScriptRoot 'resume'
 $ProReserve   = 3.0      # %-of-Pro-budget reserved per paced session (one handoff). Anchor.
 $ActiveSec    = 360      # a session counts as "active" if seen within this many seconds
-$StaleSec     = 86400    # session files older than this are pruned
+$StaleSec     = 86400    # UNARMED session files older than this are pruned
+$ArmedStaleSec  = 7200   # Armed Variation-B (/loop) cap. A live sleeping B loop re-arms + heartbeats on
+                         # EVERY ScheduleWakeup wake, at most one hop (<=3300s) apart. If an armed-B
+                         # session hasn't been seen in this long it CANNOT be a live loop (tab closed /
+                         # crashed / PC killed) -> it's a phantom and is pruned. Kept > one hop + slack.
+$ArmedStaleSecA = 21600  # Armed Variation-A (scheduled task) cap. An armed-A session may sit idle with a
+                         # frozen lastSeen until its task fires at the reset (<=5h away) and clears the
+                         # flag via resume-runner.ps1's Clear-Armed. Only past a full window + margin (6h)
+                         # is it a phantom (the task was deleted / scheduler disabled and never ran).
 $NoticePct    = 75       # soft awareness threshold (5h%)
 $AskPct       = 75       # unresolved sessions are asked the opt-in once 5h usage crosses THIS line.
                          # Anchored to awareness (not the save-line) so the ask lands with real room
@@ -268,8 +276,20 @@ function Get-SessionHostProc {
 }
 
 function Get-JoinedActiveCount {
-    # Count joined sessions that are active within $ActiveSec OR have a pending auto-resume armed
-    # (idle-but-hooked-to-resume sessions still need reserved save-room). Prune stale, unarmed files.
+    # Count joined sessions that are active within $ActiveSec OR have a LIVE pending auto-resume armed
+    # (idle-but-hooked-to-resume sessions still need reserved save-room). Prune dead/phantom files.
+    #
+    # "Armed" alone is NOT proof a session is still alive - and the old code trusted it forever, which is
+    # exactly the phantom-session bug: a Variation-B (/loop) session closed uncleanly (tab shut without
+    # Ctrl+C, crash, PC kill) leaves resumeArmed=true with nothing to ever clear it, so it counted toward
+    # the pool permanently and tightened every other session's save-line. The two variations differ in
+    # what backs the armed flag, so pruning is now mode-aware (thresholds above):
+    #   * Variation A: a Windows scheduled task + resume-runner.ps1 is the out-of-band backing. At the
+    #     reset it fires (or skips if the tab was closed / PC rebooted) and ALWAYS calls Clear-Armed, so
+    #     an armed-A flag self-heals within ~one 5h window. Phantom only if armed past $ArmedStaleSecA.
+    #   * Variation B: NOTHING out-of-band backs it - only the live /loop calling -LoopResume sets/clears
+    #     it, and that heartbeats (refreshes lastSeen) at most one ScheduleWakeup hop apart. So an armed-B
+    #     session older than $ArmedStaleSec is provably dead and is pruned.
     if (-not (Test-Path $SessionsDir)) { return 0 }
     $nowDto = [datetimeoffset]::UtcNow
     $n = 0
@@ -277,9 +297,15 @@ function Get-JoinedActiveCount {
         try {
             $s = Get-Content $file.FullName -Raw | ConvertFrom-Json
             $age = ($nowDto - [datetimeoffset]::Parse($s.lastSeen)).TotalSeconds
-            # Never prune a session with a pending resume out from under it; otherwise prune when stale.
-            if ($age -gt $StaleSec -and -not $s.resumeArmed) { Remove-Item $file.FullName -Force -ErrorAction SilentlyContinue; continue }
-            if ($s.joined -and ($age -le $ActiveSec -or $s.resumeArmed)) { $n++ }
+            $armed = [bool]$s.resumeArmed
+            # Per-session staleness ceiling: unarmed -> long $StaleSec grace; armed -> a mode-specific
+            # "is this resume still live?" cap. Unknown/none mode falls to the stricter B cap (B is the
+            # variation with no out-of-band backing, so defaulting to it clears phantoms fastest).
+            $cap = if (-not $armed) { $StaleSec }
+                   elseif ("$($s.resumeMode)" -eq 'A') { $ArmedStaleSecA }
+                   else { $ArmedStaleSec }
+            if ($age -gt $cap) { Remove-Item $file.FullName -Force -ErrorAction SilentlyContinue; continue }
+            if ($s.joined -and ($age -le $ActiveSec -or $armed)) { $n++ }
         } catch { }
     }
     return $n
